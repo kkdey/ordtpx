@@ -81,7 +81,7 @@ param_extract_ztree <- function(z_tree_in, del_beta, a_mu, b_mu)
                     mu_out <- (intree[[1]]+a_mu - 1)/(b_mu+1);
                     out_list <- list("beta_tree"=beta_out,"mu"=mu_out);
                     return(out_list)
-  })
+  }, mc.cores=detectCores())
   return(param_set)
 }
 
@@ -97,4 +97,54 @@ mu_tree_build <- function(beta_tree, mu_top)
   }
   return(mu_tree)
 }
+
+## Build a set of mu trees across the topics
+
+mu_tree_build_set <- function(param_set)
+{
+  K <- length(param_set)
+  mu_tree_set <- lapply(1:K, function(k)
+              {
+                out <- mu_tree_build(param_set[[k]]$beta_tree,param_set[[k]]$mu);
+                return(out)
+  })
+  return(mu_tree_set)
+}
+
+## Build a set of theta trees from mu trees
+
+theta_tree_build_set <- function(mu_tree_set)
+{
+  K <- length(mu_tree_set)
+  theta_tree_set <- lapply(1:K, function(k)
+                                {
+                                      out <- extract_theta_tree_from_mu(mu_tree_set[[k]])
+                                      return(out)
+  })
+  return(theta_tree_set)
+}
+
+param_extract_mu_tree <- function(mu_tree_set)
+{
+  if(!is.list(mu_tree_set) | !is.list(mu_tree_set[[1]])) stop("mu_tree input must be a list of lists")
+  K <- length(mu_tree_set);
+  beta_set <- vector(mode="list",length=K);
+  param_set <- mclapply(1:K, function(k)
+  {
+    intree <- mu_tree_set[[k]];
+    S <- length(intree);
+    beta_out <- vector(mode="list",length=S-1);
+    for(s in 2:S){
+      beta_out[[(s-1)]] <- (intree[[s]][c(TRUE,FALSE)])/(intree[[(s-1)]]);
+    }
+    mu_out <- intree[[1]];
+    out_list <- list("beta_tree"=beta_out,"mu"=mu_out);
+    return(out_list)
+  }, mc.cores=detectCores());
+  return(param_set)
+}
+
+
+
+## Prior calculation MRA
 
