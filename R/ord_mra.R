@@ -194,7 +194,7 @@ loglik_fn <- function(z_tree, param_set)
 
 ## Posterior computation: similar to tpxlpost() function in maptpx package of Matt Taddy
 
-ord_tpxlpost <- function(counts, omega_iter, param_set, del_beta, a_mu, b_mu, ztree_options=c(1,2))
+tpxlpost <- function(counts, omega_iter, param_set, del_beta, a_mu, b_mu, ztree_options=c(1,2))
 {
   z_tree <- z_tree_construct(counts, omega_iter = omega_iter, theta_iter = theta_iter, ztree_options = 1)
   loglik_value <- loglik_fn(z_tree, param_set = param_set);

@@ -141,7 +141,7 @@ tpxinit <- function(X, initheta, K1, alpha, verb){
 
 ## ** main workhorse function.  Only Called by the above wrappers.
 ## topic estimation for a given number of topics (taken as ncol(theta))
-tpxfit <- function(X, theta, alpha, tol, verb,
+tpxfit <- function(counts, X, param_set, del_beta, a_mu, b_mu,  tol, verb,
                    admix, grp, tmax, wtol, qn)
 {
   ## inputs and dimensions
@@ -150,8 +150,6 @@ tpxfit <- function(X, theta, alpha, tol, verb,
   n <- nrow(X)
   p <- ncol(X)
   m <- row_sums(X)
-  if(is.null(alpha)){ alpha <- 1/(K*p) }
-  if(is.matrix(alpha)){ if(nrow(alpha)!=p || ncol(alpha)!=K){ stop("bad matrix alpha dimensions") }}
 
   ## recycle these in tpcweights to save time
   xvo <- X$v[order(X$i)]
@@ -160,7 +158,6 @@ tpxfit <- function(X, theta, alpha, tol, verb,
 
   ## Initialize
   omega <- tpxweights(n=n, p=p, xvo=xvo, wrd=wrd, doc=doc, start=tpxOmegaStart(X,theta), theta=theta)
-  if(!admix){ omega <- matrix(apply(omega,2, function(w) tapply(w,grp,mean)), ncol=K) }
 
   ## tracking
   iter <- 0
@@ -172,19 +169,39 @@ tpxfit <- function(X, theta, alpha, tol, verb,
 
   Y <- NULL # only used for qn > 0
   Q0 <- col_sums(X)/sum(X)
-  L <- tpxlpost(X=X, theta=theta, omega=omega, alpha=alpha, admix=admix, grp=grp)
+  L <- tpxlpost(counts, omega=omega, param_set, del_beta, a_mu, b_mu, ztree_options=1);
  # if(is.infinite(L)){ L <- sum( (log(Q0)*col_sums(X))[Q0>0] ) }
 
   ## Iterate towards MAP
   while( update  && iter < tmax ){
 
     ## sequential quadratic programming for conditional Y solution
+
     if(admix && wtol > 0){ Wfit <- tpxweights(n=nrow(X), p=ncol(X), xvo=xvo, wrd=wrd, doc=doc,
                                 start=omega, theta=theta,  verb=0, nef=TRUE, wtol=wtol, tmax=20) }
     else{ Wfit <- omega }
 
+    ## Construct the MRA of z-values given the current iterates of omega /theta
+
+    z_tree <- z_tree_construct(counts, omega_iter = Wfit, theta_iter = theta, ztree_options = 1);
+
+    ## Extract the beta and mu_0 parameters from the MRA tree
+
+    param_set_fit <- param_extract_ztree(z_tree, del_beta, a_mu, b_mu);
+
+
+    ## Build a MRA of mu-tree sets (set of clusters)
+
+    mu_tree_set_fit <- mu_tree_build_set(param_set_fit);
+
+    ## Extract the theta updates from the MRA tree
+
+    levels <- length(mu_tree_set_fit[[1]]);
+    theta_fit <- do.call(rbind, lapply(1:nclus, function(l) mu_tree_set_fit[[l]][[levels]]/mu_tree_set_fit[[l]][[1]]));
+    move <- list(theta=theta_fit, omega=Wfit);
+
     ## joint parameter EM update
-    move <- tpxEM(X=X, m=m, theta=theta, omega=Wfit, alpha=alpha, admix=admix, grp=grp)
+    ## move <- tpxEM(X=X, m=m, theta=theta, omega=Wfit, alpha=alpha, admix=admix, grp=grp)
 
     ## quasinewton-newton acceleration
     QNup <- tpxQN(move=move, Y=Y, X=X, alpha=alpha, verb=verb, admix=admix, grp=grp, doqn=qn-dif)
@@ -193,8 +210,14 @@ tpxfit <- function(X, theta, alpha, tol, verb,
 
     if(QNup$L < L){  # happens on bad Wfit, so fully reverse
       if(verb > 10){ cat("_reversing a step_") }
-      move <- tpxEM(X=X, m=m, theta=theta, omega=omega, alpha=alpha, admix=admix, grp=grp)
-      QNup$L <-  tpxlpost(X=X, theta=move$theta, omega=move$omega, alpha=alpha, admix=admix, grp=grp) }
+      ##move <- tpxEM(X=X, m=m, theta=theta, omega=omega, alpha=alpha, admix=admix, grp=grp)
+      z_tree <- z_tree_construct(counts, omega_iter = omega, theta_iter = theta, ztree_options = 1);
+      param_set_fit <- param_extract_ztree(z_tree, del_beta, a_mu, b_mu);
+      mu_tree_set_fit <- mu_tree_build_set(param_set_fit);
+      levels <- length(mu_tree_set_fit[[1]]);
+      theta_fit <- do.call(rbind, lapply(1:nclus, function(l) mu_tree_set_fit[[l]][[levels]]/mu_tree_set_fit[[l]][[1]]));
+      move <- list(theta=theta_fit, omega=omega);
+      QNup$L <-  tpxlpost(counts, move$omega, param_set_fit, del_beta, a_mu, b_mu, ztree_options=1) }
 
     ## calculate dif
     dif <- (QNup$L-L)
@@ -219,12 +242,14 @@ tpxfit <- function(X, theta, alpha, tol, verb,
     ## iterate
     iter <- iter+1
     theta <- move$theta
+    theta_tree_set <- lapply(1:K, function(k) mra_bottom_up(theta));
+    param_set <- param_extract_mu_tree(theta_tree_set)
     omega <- move$omega
 
   }
 
   ## final log posterior
-  L <- tpxlpost(X=X, theta=theta, omega=omega, alpha=alpha, admix=admix, grp=grp)
+  L <- tpxlpost(counts, omega, param_set, del_beta, a_mu, b_mu, ztree_options=1);
 
   ## summary print
   if(verb>0){
@@ -233,7 +258,7 @@ tpxfit <- function(X, theta, alpha, tol, verb,
     cat("\n")
   }
 
-  out <- list(theta=theta, omega=omega, K=K, alpha=alpha, L=L, iter=iter)
+  out <- list(param_set=param_set, omega=omega, K=K, L=L, iter=iter)
   invisible(out) }
 
 

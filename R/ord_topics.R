@@ -5,6 +5,8 @@ ord_topics <- function(counts, K, shape=NULL, initopics=NULL, tol=0.1,
                    bf=FALSE, kill=2, ord=TRUE, del_beta, a_mu, b_mu, verb=1, ...)
   ## tpxselect defaults: tmax=10000, wtol=10^(-4), qn=100, grp=NULL, admix=TRUE, nonzero=FALSE, dcut=-10
 {
+  if(log(dim(counts)[2])%%log(2)!=0) stop("number of features not a power of 2")
+
   X <- CheckCounts(counts)
   p <- ncol(X)
   if(verb>0)
@@ -17,30 +19,43 @@ ord_topics <- function(counts, K, shape=NULL, initopics=NULL, tol=0.1,
   if(prod(K>1)!=1){ stop(cat("use K values > 1\n")) }
   K <- sort(K)
 
-  ## initialize
-  omega_start <- gtools::rdirichlet(dim(counts)[1],rep(1/K,K));
-  if(log(dim(counts)[2])%%log(2)!=0) stop("number of features not a power of 2")
-  levels <- log(dim(counts)[2])/log(2)+1;
-  theta_start <- do.call(rbind,lapply(1:nclus, function(s) return(mra_tree_prior_theta(levels,del_beta)[[levels]])));
+  BF <- D <- NULL
+  iter <- 0
 
-  omega <- tpxweights(n=n, p=p, xvo=xvo, wrd=wrd, doc=doc, start=tpxOmegaStart(X,theta), theta=theta)
+  ## Null model log probability
+  sx <- sum(X)
+  qnull <- col_sums(X)/sx
+  null <- sum( X$v*log(qnull[X$j]) ) - 0.5*(n+p)*(log(sx) - log(2*pi))
+
+
+  ## initialize
+  levels <- log(dim(counts)[2])/log(2)+1;
+  theta_tree_start <- lapply(1:nclus, function(s) return(mra_tree_prior_theta(levels,del_beta)));
+
+  param_set_start <- param_extract_mu_tree(theta_tree_start);
+
+  fit <- tpxfit(counts=counts, X=X, param_set=param_set_start, del_beta=del_beta, a_mu=a_mu, b_mu=b_mu,
+                tol=tol, verb=verb, admix=admix, grp=grp, tmax=tmax, wtol=wtol, qn=qn);
+
 
   #initopics <- tpxinit(X[1:min(ceiling(nrow(X)*.05),100),], initopics, K[1], shape, verb)
 
   ## either search for marginal MAP K and return bayes factors, or just fit
-  tpx <- tpxSelect(X, K, bf, initopics, alpha=shape, tol, kill, verb, ...)
-  K <- tpx$K
+  ## tpx <- tpxSelect(X, K, bf, initopics, alpha=shape, tol, kill, verb, ...)
+  ## K <- tpx$K
 
   ## clean up and out
-  if(ord){ worder <- order(col_sums(tpx$omega), decreasing=TRUE) } # order by decreasing usage
+  if(ord){ worder <- order(col_sums(fit$omega), decreasing=TRUE) } # order by decreasing usage
   else{ worder <- 1:K }
   ## Main parameters
-  theta=matrix(tpx$theta[,worder], ncol=K, dimnames=list(phrase=dimnames(X)[[2]], topic=paste(1:K)) )
-  omega=matrix(tpx$omega[,worder], ncol=K, dimnames=list(document=NULL, topic=paste(1:K)) )
+  mu_tree_set <- mu_tree_build_set(fit$param_set);
+  theta <- do.call(cbind, lapply(1:nclus, function(l) mu_tree_set[[l]][[levels]]/mu_tree_set[[l]][[1]]));
+  theta=matrix(theta[,worder], ncol=K, dimnames=list(phrase=dimnames(X)[[2]], topic=paste(1:K)) )
+  omega=matrix(fit$omega[,worder], ncol=K, dimnames=list(document=NULL, topic=paste(1:K)) )
   if(nrow(omega)==nrow(X)){ dimnames(omega)[[1]] <- dimnames(X)[[1]] }
 
   ## topic object
-  out <- list(K=K, theta=theta, omega=omega, BF=tpx$BF, D=tpx$D, X=X)
+  out <- list(K=K, theta=theta, omega=omega, param_set=fit$param_set, loglik=fit$L, X=X, null=null)
   class(out) <- "topics"
   invisible(out) }
 
