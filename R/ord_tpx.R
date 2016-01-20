@@ -14,130 +14,8 @@ CheckCounts <- function(counts){
   return(as.simple_triplet_matrix(counts))
 }
 
-## Topic estimation and selection for a list of K values
-tpxSelect <- function(X, K, bf, initheta, alpha, tol, kill, verb,
-                      admix=TRUE, grp=NULL, tmax=10000,
-                      wtol=10^{-4}, qn=100, nonzero=FALSE, dcut=-10){
-
-
-  ## return fit for single K
-  if(length(K)==1 && bf==FALSE){
-    if(verb){ cat(paste("Fitting the",K,"topic model.\n")) }
-    fit <-  tpxfit(X=X, theta=initheta, alpha=alpha, tol=tol, verb=verb,
-                   admix=admix, grp=grp, tmax=tmax, wtol=wtol, qn=qn)
-    fit$D <- tpxResids(X=X, theta=fit$theta, omega=fit$omega, grp=grp, nonzero=nonzero)$D
-    return(fit)
-  }
-
-  if(verb){ cat(paste("Fit and Bayes Factor Estimation for K =",K))
-           # if(length(K)>1){ cat(paste(" ...", max(K))) }
-            cat("\n") }
-
-  ## dimensions
-  n <- nrow(X)
-  p <- ncol(X)
-
-  BF <- D <- NULL
-  iter <- 0
-
-  ## Null model log probability
-  sx <- sum(X)
-  qnull <- col_sums(X)/sx
-  null <- sum( X$v*log(qnull[X$j]) ) - 0.5*(n+p)*(log(sx) - log(2*pi))
-
-  ## allocate and initialize
-  best <- -Inf
-  bestfit <- NULL
-
-  ## loop over topic numbers
-  for(i in 1:nK){
-
-    ## Solve for map omega in NEF space
-    fit <- tpxfit(X=X, theta=initheta, alpha=alpha, tol=tol, verb=verb,
-                  admix=admix, grp=grp, tmax=tmax, wtol=wtol, qn=qn)
-
-    BF <- c(BF, tpxML(X=X, theta=fit$theta, omega=fit$omega, alpha=fit$alpha, L=fit$L, dcut=dcut, admix=admix, grp=grp) - null)
-    R <- tpxResids(X=X, theta=fit$theta, omega=fit$omega, grp=grp, nonzero=nonzero)
-    D <- cbind(D, unlist(R$D))
-
-    if(verb>0) cat(paste("log BF(", K[i], ") =", round(BF[i],2)))
-    if(verb>1) cat(paste(" [ ", fit$iter,"steps, disp =",round(D[1,i],2)," ]\n")) else if(verb >0) cat("\n")
-
-    if(is.nan(BF[i])){
-      cat("NAN for Bayes factor.\n")
-      return(bestfit)
-      break}
-
-    if(BF[i] > best){ # check for a new "best" topic
-      best <- BF[i]
-      bestfit <- fit
-    } else if(kill>0 && i>kill){ # break after kill consecutive drops
-      if(prod(BF[i-0:(kill-1)] < BF[i-1:kill])==1) break }
-
-    if(i<nK){
-      if(!admix){ initheta <- tpxinit(X,2,K[i+1], alpha, 0) }
-      else{ initheta <- tpxThetaStart(X, fit$theta, fit$omega, K[i+1]) }
-    }
-  }
-
-  names(BF) <- dimnames(D)[[2]] <- paste(K[1:length(BF)])
-
-  return(list(theta=bestfit$theta, omega=bestfit$omega, alpha=bestfit$alpha,
-              BF=BF, D=D, K=K[which.max(BF)])) }
 
 ## theta initialization
-tpxinit <- function(X, initheta, K1, alpha, verb){
-## initheta can be matrix, or c(nK, tmax, tol, verb)
-
-  if(is.matrix(initheta)){
-    if(ncol(initheta)!=K1){ stop("mis-match between initheta and K.") }
-    if(prod(initheta>0) != 1){ stop("use probs > 0 for initheta.") }
-    return(normalize(initheta, byrow=FALSE)) }
-
-  if(is.matrix(alpha)){
-    if(nrow(alpha)!=ncol(X) || ncol(alpha)!=K1){ stop("bad matrix alpha dimensions; check your K") }
-    return(normalize(alpha, byrow=FALSE)) }
-
-  if(is.null(initheta)){ ilength <- K1-1 }
-  else{ ilength <- initheta[1] }
-  if(ilength < 1){ ilength <- 1 }
-
-  ## set number of initial steps
-  if(length(initheta)>1){ tmax <- initheta[2] }
-  else{ tmax <- 3 }
-  ## set the tolerance
-  if(length(initheta)>2){ tol <- initheta[3] }
-  else{ tol <- 0.5 }
-  ## print option
-  if(length(initheta)>3){ verb <- initheta[4] }
-  else{ verb <- 0 }
-
-
-  if(verb){ cat("Building initial topics")
-            if(verb > 1){ cat(" for K = ") }
-            else{ cat("... ") } }
-
-  nK <- length( Kseq <-  unique(ceiling(seq(2,K1,length=ilength))) )
-  initheta <- tpxThetaStart(X, matrix(col_sums(X)/sum(X), ncol=1), matrix(rep(1,nrow(X))), 2)
-
-  if(verb > 0)
-    { cat("\n")
-      print(list(Kseq=Kseq, tmax=tmax, tol=tol)) }
-
-  ## loop over topic numbers
-  for(i in 1:nK){
-
-    ## Solve for map omega in NEF space
-    fit <- tpxfit(X=X, theta=initheta, alpha=alpha, tol=tol, verb=verb,
-                  admix=TRUE, grp=NULL, tmax=tmax, wtol=-1, qn=-1)
-    if(verb>1){ cat(paste(Kseq[i],",", sep="")) }
-
-    if(i<nK){ initheta <- tpxThetaStart(X, fit$theta, fit$omega, Kseq[i+1]) }
-    else{ initheta <- fit$theta }
-  }
-  if(verb){ cat("done.\n") }
-  return(initheta)
-}
 
 ## ** main workhorse function.  Only Called by the above wrappers.
 ## topic estimation for a given number of topics (taken as ncol(theta))
@@ -282,31 +160,11 @@ tpxweights <- function(n, p, xvo, wrd, doc, start, theta, verb=FALSE, nef=TRUE, 
               tol = as.double(wtol),
               tmax = as.integer(tmax),
               verb = as.integer(verb),
-              PACKAGE="maptpx")
+              PACKAGE="ordtpx")
   return(t(matrix(omega$W, nrow=ncol(theta), ncol=n))) }
 
 ## ** Called only in tpx.R
 
-## single EM update. two versions: admix and mix
-tpxEM <- function(X, m, theta, omega, alpha, admix, grp)
-{
-  n <- nrow(X)
-  p <- ncol(X)
-  K <- ncol(theta)
-
-  if(admix){ Xhat <- (X$v/tpxQ(theta=theta, omega=omega, doc=X$i, wrd=X$j))*(omega[X$i,]*theta[X$j,])
-             Zhat <- .C("Rzhat", n=as.integer(n), p=as.integer(p), K=as.integer(K), N=as.integer(nrow(Xhat)),
-                         Xhat=as.double(Xhat), doc=as.integer(X$i-1), wrd=as.integer(X$j-1),
-                        zj = as.double(rep(0,K*p)), zi = as.double(rep(0,K*n)), PACKAGE="maptpx")
-             theta <- normalize(matrix(Zhat$zj+alpha, ncol=K), byrow=FALSE)
-             omega <- normalize(matrix(Zhat$zi+1/K, ncol=K)) }
-  else{
-    qhat <- tpxMixQ(X, omega, theta, grp, qhat=TRUE)$qhat
-    ## EM update
-    theta <- normalize(tcrossprod_simple_triplet_matrix( t(X), t(qhat) ) + alpha, byrow=FALSE)
-    omega <- normalize(matrix(apply(qhat*m,2, function(x) tapply(x,grp,sum)), ncol=K)+1/K )  }
-
-  return(list(theta=theta, omega=omega)) }
 
 ## Quasi Newton update for q>0
 tpxQN <- function(move, Y, X, alpha, verb, admix, grp, doqn)
@@ -351,120 +209,6 @@ tpxQN <- function(move, Y, X, alpha, verb, admix, grp, doqn)
 }
 
 
-## unnormalized log posterior (objective function)
-tpxlpost <- function(X, theta, omega, alpha, admix=TRUE, grp=NULL)
-{
-  if(!inherits(X,"simple_triplet_matrix")){ stop("X needs to be a simple_triplet_matrix.") }
-  K <- ncol(theta)
-
-  if(admix){ L <- sum( X$v*log(tpxQ(theta=theta, omega=omega, doc=X$i, wrd=X$j)) ) }
-  else{ L <- sum(tpxMixQ(X, omega, theta, grp)$lqlhd) }
-  if(is.null(nrow(alpha))){ if(alpha != 0){ L <- L + sum(alpha*log(theta))  } } # unnormalized prior
-  L <- L + sum(log(omega))/K
-
-  return(L) }
-
-## log marginal likelihood
-tpxML <- function(X, theta, omega, alpha, L, dcut, admix=TRUE, grp=NULL){
-  ## get the indices
-  K <- ncol(theta)
-  p <- nrow(theta)
-  n <- nrow(omega)
-
-  ## return BIC for simple finite mixture model
-  if(!admix){
-    qhat <- tpxMixQ(X, omega, theta, grp, qhat=TRUE)$qhat
-    ML <- sum(X$v*log(row_sums(qhat[X$i,]*theta[X$j,])))
-    return( ML - 0.5*( K*p + (K-1)*n )*log(sum(X)) ) }
-
-  ML <- L  + lfactorial(K) # lhd multiplied by label switching modes
-
-  ## block-diagonal approx to determinant of the negative log hessian matrix
-  q <- tpxQ(theta=theta, omega=omega, doc=X$i, wrd=X$j)
-  D <- tpxHnegDet(X=X, q=q, theta=theta, omega=omega, alpha=alpha)
-
-  D[D < dcut] <- dcut
-  ML <- ML - 0.5*sum( D  )   # -1/2 |-H|
-
-  ML <- ML + (K*p + sum(omega>0.01))*log(2*pi)/2  # (d/2)log(2pi)
-  if(is.null(nrow(alpha))){ # theta prior normalizing constant
-    ML <- ML + K*( lgamma(p*(alpha+1)) - p*lgamma(alpha+1) )  }
-  else{ ML <- ML + sum(lgamma(col_sums(alpha+1)) - col_sums(lgamma(alpha+1))) } # matrix version
-  ## omega(phi) prior normalizing constant number of parameters
-  ML <- ML +  sum(D[-(1:p)]>dcut)*( lfactorial(K) - K*lgamma( 1+1/K ) ) #
-
-  return(ML) }
-
-## find residuals for X$v
-tpxResids <- function(X, theta, omega, grp=NULL, nonzero=TRUE)
-{
-  if(!inherits(X,"simple_triplet_matrix")){ stop("X needs to be a simple_triplet_matrix.") }
-
-  m <- row_sums(X)
-  K <- ncol(theta)
-  n <- nrow(X)
-  phat <- sum(col_sums(X)>0)
-  d <- n*(K-1) + K*( phat-1 )
-
-  if(nrow(omega) == nrow(X)){
-    qhat <- tpxQ(theta=theta, omega=omega, doc=X$i, wrd=X$j)
-    xhat <- qhat*m[X$i]
-  } else{
-    q <- tpxMixQ(X=X, omega=omega, theta=theta, grp=grp, qhat=TRUE)$qhat
-    qhat <- row_sums(q[X$i,]*theta[X$j,])
-    xhat <- qhat*m[X$i] }
-
-  if(nonzero || nrow(omega) < nrow(X)){
-    ## Calculations based on nonzero counts
-    ## conditional adjusted residuals
-    e <- X$v^2 - 2*(X$v*xhat - xhat^2)
-    s <- qhat*m[X$i]*(1-qhat)^{1-m[X$i]}
-    r <- sqrt(e/s)
-    df <- length(r)*(1-d/(n*phat))
-    R <- sum(r^2)
-  }
-  else{
-    ## full table calculations
-    e <- (X$v^2 - 2*X$v*m[X$i]*qhat)
-    s <- m[X$i]*qhat*(1-qhat)
-    fulltable <- .C("RcalcTau",
-                 n = as.integer(nrow(omega)),
-                 p = as.integer(nrow(theta)),
-                 K = as.integer(ncol(theta)),
-                 m = as.double(m),
-                 omega = as.double(omega),
-                 theta = as.double(theta),
-                 tau = double(1), size=double(1),
-                 PACKAGE="maptpx" )
-    tau <- fulltable$tau
-    R <- sum(e/s) + tau
-    df <-  fulltable$size - phat  - d
-    r <- suppressWarnings(sqrt(e/s + tau))
-    r[is.nan(r)] <- 0 ## should not happen, but can theoretically
-  }
-
-  ## collect and output
-  sig2 <- R/df
-  rho <- suppressWarnings(pchisq(R, df=df, lower.tail=FALSE))
-  D <- list(dispersion=sig2, pvalue=rho, df=df)
-  return( list(s=s, e=e, r=r, D=D) ) }
-
-
-## fast initialization functions for theta (after increasing K) and omega (given theta)
-tpxThetaStart <- function(X, theta, omega, K)
-  {
-    R <- tpxResids(X, theta=theta, omega=omega, nonzero=TRUE)
-    X$v <- R$e*(R$r>3) + 1/ncol(X)
-    Kpast <- ncol(theta)
-    Kdiff <- K-Kpast
-    if(Kpast != ncol(omega) || Kpast >= K){ stop("bad K in tpxThetaStart") }
-    initheta <- normalize(Kpast*theta+rowMeans(theta), byrow=FALSE)
-    n <- nrow(X)
-    ki <- matrix(1:(n-n%%Kdiff), ncol=Kdiff)
-    for(i in 1:Kdiff){ initheta <- cbind(initheta, (col_sums(X[ki[,i],])+1/ncol(X))/(sum(X[ki[,i],])+1)) }
-    return( initheta )
-  }
-
 tpxOmegaStart <- function(X, theta)
   {
     if(!inherits(X,"simple_triplet_matrix")){ stop("X needs to be a simple_triplet_matrix.") }
@@ -491,7 +235,7 @@ tpxQ <- function(theta, omega, doc, wrd){
             omega = as.double(omega),
             theta = as.double(theta),
             q = double(length(wrd)),
-            PACKAGE="maptpx" )
+            PACKAGE="ordtpx" )
 
   return( out$q ) }
 
@@ -513,7 +257,7 @@ tpxMixQ <- function(X, omega, theta, grp=NULL, qhat=FALSE){
                omega = as.double(omega),
                theta = as.double(theta),
                Q = double(K*n),
-               PACKAGE="maptpx")
+               PACKAGE="ordtpx")
   ## model and component likelihoods
   lQ <- matrix(mixhat$Q, ncol=K)
   lqlhd <- log(row_sums(exp(lQ)))
@@ -528,37 +272,6 @@ tpxMixQ <- function(X, omega, theta, grp=NULL, qhat=FALSE){
   }
   return(list(lQ=lQ, lqlhd=lqlhd, qhat=qhat)) }
 
-## negative log hessian block diagonal matrix for theta & omega
-tpxHnegDet <- function(X, q, theta, omega, alpha){
-  K <- ncol(theta)
-  n <- nrow(omega)
-
-  ## sparse Xij/Qij^2
-  Xq <- X
-  Xq$v <- Xq$v/q^2
-
-  ## negative 2nd derivitive matrices for theta
-  HT <- tcrossprod_simple_triplet_matrix(t(Xq), apply(omega, 1, function(v) v%o%v ) )
-  HT[,K*(0:(K-1))+1:K] <- HT[,K*(0:(K-1))+1:K] + alpha/theta^2 # will break for alpha<=1
-  DT <- apply(HT, 1, tpxlogdet)
-
-  ## ditto for omega
-  HW <- matrix(.C("RnegHW",
-                  n = as.integer(nrow(omega)),
-                  p = as.integer(nrow(theta)),
-                  K = as.integer(K-1),
-                  omeg = as.double(omega[,-1]),
-                  thet = as.double(theta[,-1]),
-                  doc = as.integer(X$i-1),
-                  wrd = as.integer(X$j-1),
-                  cnt = as.double(X$v),
-                  q = as.double(q),
-                  N = as.integer(length(q)),
-                  H = double(n*(K-1)^2),
-                  PACKAGE="maptpx")$H,
-               nrow=(K-1)^2, ncol=n)
-  DW <- apply(HW, 2, tpxlogdet)
-  return( c(DT,DW) )  }
 
 ## functions to move theta/omega to and from NEF.
 tpxToNEF <- function(theta, omega){
@@ -569,7 +282,7 @@ tpxToNEF <- function(theta, omega){
             n=as.integer(n), p=as.integer(p), K=as.integer(K),
             Y=double((p-1)*K + n*(K-1)),
             theta=as.double(theta), tomega=as.double(t(omega)),
-            PACKAGE="maptpx")$Y)
+            PACKAGE="ordtpx")$Y)
 }
 
 ## 'From' NEF representation back to probabilities
@@ -577,17 +290,7 @@ tpxFromNEF <- function(Y, n, p, K){
   bck <- .C("RfromNEF",
             n=as.integer(n), p=as.integer(p), K=as.integer(K),
             Y=as.double(Y), theta=double(K*p), tomega=double(K*n),
-            PACKAGE="maptpx")
+            PACKAGE="ordtpx")
   return(list(omega=t( matrix(bck$tomega, nrow=K) ), theta=matrix(bck$theta, ncol=K)))
 }
-
-## utility log determinant function for speed/stabilty
-tpxlogdet <- function(v){
-    v <- matrix(v, ncol=sqrt(length(v)))
-
-    if( sum(zeros <- colSums(v)==0)!=0 ){
-      cat("warning: boundary values in laplace approx\n")
-      v <- v[-zeros,-zeros] }
-
-    return(determinant(v, logarithm=TRUE)$modulus) }
 
