@@ -23,6 +23,8 @@ ord_topics <- function(counts, K, shape=NULL, initopics=NULL, tol=0.1,
   levels <- log(dim(counts)[2])/log(2)+1;
   theta_start <- do.call(rbind,lapply(1:nclus, function(s) return(mra_tree_prior_theta(levels,del_beta)[[levels]])));
 
+  omega <- tpxweights(n=n, p=p, xvo=xvo, wrd=wrd, doc=doc, start=tpxOmegaStart(X,theta), theta=theta)
+
   #initopics <- tpxinit(X[1:min(ceiling(nrow(X)*.05),100),], initopics, K[1], shape, verb)
 
   ## either search for marginal MAP K and return bayes factors, or just fit
