@@ -1,12 +1,20 @@
 Package: ordtpx
-Title:  Estimation of Topic Models with Ordered Features using Multi-resolution analysis
+Title: Estimation of Topic Models with Ordered Features using Multi-resolution
+    analysis
 Version: 0.0.1
 Author: Kushal K. Dey<kkdey@uchicago.edu>
-Depends: R (>= 2.10), slam
-Suggests: MASS, wavethresh
-Description:  Posterior maximization for topic models with features that have a relative ordering among them.
-Such a model finds its applications in phylogenetic abundance data patterns. This is a modification of the
-`maptpx` package due to Matt Taddy. If you want to take advantage of openmp parallelization, uncomment the relevant flags in src/MAKEVARS before compiling.
+Depends:
+    R (>= 2.10),
+    slam
+Suggests:
+    MASS,
+    wavethresh
+Description: Posterior maximization for topic models with features that have a
+    relative ordering among them.Such a model finds its applications in phylogenetic
+    abundance data patterns. This is a modification of the `maptpx` package due to
+    Matt Taddy. If you want to take advantage of openmp parallelization, uncomment
+    the relevant flags in src/MAKEVARS before compiling.
 Maintainer: Kushal K. Dey <kkdey@uchicago.edu>
 License: GPL-3
 URL: http://kkdey.github.io/
+RoxygenNote: 5.0.1
