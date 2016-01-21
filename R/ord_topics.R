@@ -1,6 +1,4 @@
 ##### Estimation for Topic Models ######
-
-library(slam)
 ## intended main function; provides defaults and fits topic model for the user defined K
 ord_topics <- function(counts, K, shape=NULL, initopics=NULL, tol=0.1,
                   ord=TRUE, del_beta, a_mu, b_mu, verb=TRUE, ...)

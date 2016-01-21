@@ -5,7 +5,8 @@ Version: 0.0.1
 Author: Kushal K. Dey<kkdey@uchicago.edu>
 Depends:
     R (>= 2.10),
-    slam
+    slam,
+    parallel
 Suggests:
     MASS,
     wavethresh

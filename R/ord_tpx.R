@@ -27,7 +27,7 @@ tpxfit <- function(counts, X, param_set, del_beta, a_mu, b_mu,  tol, verb,
   mu_tree_set <- mu_tree_build_set(param_set);
   K <- length(param_set);
   levels <- length(mu_tree_set[[1]]);
-  theta <- do.call(rbind, lapply(1:K, function(l) mu_tree_set[[l]][[levels]]/mu_tree_set[[l]][[1]]));
+  theta <- do.call(cbind, lapply(1:K, function(l) mu_tree_set[[l]][[levels]]/mu_tree_set[[l]][[1]]));
   n <- nrow(X)
   p <- ncol(X)
   m <- row_sums(X)
@@ -44,7 +44,7 @@ tpxfit <- function(counts, X, param_set, del_beta, a_mu, b_mu,  tol, verb,
   iter <- 0
   dif <- tol+1+qn
   update <- TRUE
-  if(verb>0){
+  if(verb){
     cat("log posterior increase: " )
     digits <- max(1, -floor(log(tol, base=10))) }
 
@@ -64,7 +64,7 @@ tpxfit <- function(counts, X, param_set, del_beta, a_mu, b_mu,  tol, verb,
 
     ## Construct the MRA of z-values given the current iterates of omega /theta
 
-    z_tree <- z_tree_construct(counts, omega_iter = Wfit, theta_iter = theta, ztree_options = 1);
+    z_tree <- z_tree_construct(counts, omega_iter = Wfit, theta_iter = t(theta), ztree_options = 1);
 
     ## Extract the beta and mu_0 parameters from the MRA tree
 

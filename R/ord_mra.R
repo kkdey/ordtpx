@@ -74,7 +74,7 @@ param_extract_ztree <- function(z_tree_in, del_beta, a_mu, b_mu)
   if(!is.list(z_tree_in) | !is.list(z_tree_in[[1]])) stop("z_tree input must be a list of lists")
   K <- length(z_tree_in);
   beta_set <- vector(mode="list",length=K);
-  param_set <- mclapply(1:K, function(k)
+  param_set <- parallel::mclapply(1:K, function(k)
                 {
                     intree <- z_tree_in[[k]];
                     S <- length(intree);
@@ -85,7 +85,7 @@ param_extract_ztree <- function(z_tree_in, del_beta, a_mu, b_mu)
                     mu_out <- (intree[[1]]+a_mu - 1)/(b_mu+1);
                     out_list <- list("beta_tree"=beta_out,"mu"=mu_out);
                     return(out_list)
-  }, mc.cores=detectCores())
+  }, mc.cores=parallel::detectCores())
   return(param_set)
 }
 
