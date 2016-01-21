@@ -19,7 +19,7 @@ CheckCounts <- function(counts){
 
 ## ** main workhorse function.  Only Called by the above wrappers.
 ## topic estimation for a given number of topics (taken as ncol(theta))
-tpxfit <- function(counts, X, param_set, del_beta, a_mu, b_mu,  tol, verb,
+tpxfit <- function(counts, X, param_set, del_beta, a_mu, b_mu, ztree_options, tol, verb,
                    admix, grp, tmax, wtol, qn)
 {
   ## inputs and dimensions
@@ -50,7 +50,7 @@ tpxfit <- function(counts, X, param_set, del_beta, a_mu, b_mu,  tol, verb,
 
   Y <- NULL # only used for qn > 0
   Q0 <- col_sums(X)/sum(X)
-  L <- tpxlpost(counts, omega=omega, param_set, del_beta, a_mu, b_mu, ztree_options=1);
+  L <- tpxlpost(counts, omega=omega, param_set=param_set, del_beta, a_mu, b_mu, ztree_options=1);
  # if(is.infinite(L)){ L <- sum( (log(Q0)*col_sums(X))[Q0>0] ) }
 
   ## Iterate towards MAP
@@ -78,25 +78,26 @@ tpxfit <- function(counts, X, param_set, del_beta, a_mu, b_mu,  tol, verb,
     ## Extract the theta updates from the MRA tree
 
     levels <- length(mu_tree_set_fit[[1]]);
-    theta_fit <- do.call(rbind, lapply(1:nclus, function(l) mu_tree_set_fit[[l]][[levels]]/mu_tree_set_fit[[l]][[1]]));
+    theta_fit <- do.call(cbind, lapply(1:nclus, function(l) mu_tree_set_fit[[l]][[levels]]/mu_tree_set_fit[[l]][[1]]));
     move <- list(theta=theta_fit, omega=Wfit);
 
     ## joint parameter EM update
     ## move <- tpxEM(X=X, m=m, theta=theta, omega=Wfit, alpha=alpha, admix=admix, grp=grp)
 
     ## quasinewton-newton acceleration
-    QNup <- tpxQN(move=move, Y=Y, X=X, alpha=alpha, verb=verb, admix=admix, grp=grp, doqn=qn-dif)
+    QNup <- tpxQN(move=move, counts=counts, Y=Y, X=X, del_beta=del_beta, a_mu=a_mu, b_mu=b_mu,
+                  ztree_options=ztree_options, verb=verb, admix=admix, grp=grp, doqn=qn-dif)
     move <- QNup$move
     Y <- QNup$Y
 
     if(QNup$L < L){  # happens on bad Wfit, so fully reverse
       if(verb > 10){ cat("_reversing a step_") }
       ##move <- tpxEM(X=X, m=m, theta=theta, omega=omega, alpha=alpha, admix=admix, grp=grp)
-      z_tree <- z_tree_construct(counts, omega_iter = omega, theta_iter = theta, ztree_options = 1);
+      z_tree <- z_tree_construct(counts, omega_iter = omega, theta_iter = t(theta), ztree_options = 1);
       param_set_fit <- param_extract_ztree(z_tree, del_beta, a_mu, b_mu);
       mu_tree_set_fit <- mu_tree_build_set(param_set_fit);
       levels <- length(mu_tree_set_fit[[1]]);
-      theta_fit <- do.call(rbind, lapply(1:nclus, function(l) mu_tree_set_fit[[l]][[levels]]/mu_tree_set_fit[[l]][[1]]));
+      theta_fit <- do.call(cbind, lapply(1:nclus, function(l) mu_tree_set_fit[[l]][[levels]]/mu_tree_set_fit[[l]][[1]]));
       move <- list(theta=theta_fit, omega=omega);
       QNup$L <-  tpxlpost(counts, move$omega, param_set_fit, del_beta, a_mu, b_mu, ztree_options=1) }
 
@@ -122,8 +123,8 @@ tpxfit <- function(counts, X, param_set, del_beta, a_mu, b_mu,  tol, verb,
 
     ## iterate
     iter <- iter+1
-    theta <- move$theta
-    theta_tree_set <- lapply(1:K, function(k) mra_bottom_up(theta));
+    theta <- move$theta;
+    theta_tree_set <- lapply(1:K, function(k) mra_bottom_up(theta[,k]));
     param_set <- param_extract_mu_tree(theta_tree_set)
     omega <- move$omega
 
@@ -170,11 +171,12 @@ tpxweights <- function(n, p, xvo, wrd, doc, start, theta, verb=FALSE, nef=TRUE, 
 
 
 ## Quasi Newton update for q>0
-tpxQN <- function(move, Y, X, alpha, verb, admix, grp, doqn)
+tpxQN <- function(move, counts, Y, X, del_beta, a_mu, b_mu, ztree_options, verb, admix, grp, doqn)
 {
   ## always check likelihood
-  L <- tpxlpost(X=X, theta=move$theta, omega=move$omega,
-                alpha=alpha, admix=admix, grp=grp)
+  theta_tree_set_in <- lapply(1:K, function(k) mra_bottom_up(move$theta[,k]));
+  param_set_in <- param_extract_mu_tree(theta_tree_set_in)
+  L <- tpxlpost(counts, move$omega, param_set_in, del_beta, a_mu, b_mu, ztree_options)
 
   if(doqn < 0){ return(list(move=move, L=L, Y=Y)) }
 
@@ -193,8 +195,10 @@ tpxQN <- function(move, Y, X, alpha, verb, admix, grp, doqn)
                      p=nrow(move$theta), K=ncol(move$theta))
 
   ## check for a likelihood improvement
-  Lqnup <- try(tpxlpost(X=X, theta=qnup$theta, omega=qnup$omega,
-                        alpha=alpha, admix=admix, grp=grp), silent=TRUE)
+  theta_tree_set_nup <- lapply(1:K, function(k) mra_bottom_up(qnup$theta[,k]));
+  param_set_nup <- param_extract_mu_tree(theta_tree_set_nup)
+  Lqnup <- try(tpxlpost(X=X, qnup$omega, param_set_nup, del_beta, a_mu, b_mu, ztree_options), silent=TRUE)
+
 
   if(inherits(Lqnup, "try-error")){
     if(verb>10){ cat("(QN: try error) ") }

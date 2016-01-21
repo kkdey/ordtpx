@@ -57,7 +57,7 @@ z_tree_construct <- function(counts, omega_iter, theta_iter, ztree_options=c(1,2
   z_leaf_est <- round(sweep(theta_iter, MARGIN=1, colSums(sweep(omega_iter, MARGIN = 1, row_total, "*")), "*"));
   }
   if(ztree_options==1){
-    z_leaf_est <- (t(omega_iter) %*% (counts/(omega_iter %*% theta_iter)))*theta_iter;
+    z_leaf_est <- (t(omega_iter) %*% (counts/(omega_iter %*% t(theta_iter))))*theta_iter;
   }
   z_tree_out <- vector(mode="list",length=dim(omega_iter)[2])
   for(k in 1: dim(omega_iter)[2]){
