@@ -1,7 +1,7 @@
 ##### Estimation for Topic Models ######
 ## intended main function; provides defaults and fits topic model for the user defined K
 ord_topics <- function(counts, K, shape=NULL, initopics=NULL, tol=0.1,
-                  ord=TRUE, del_beta, a_mu, b_mu, ztree_options=1, verb=1, ...)
+                  ord=TRUE, del_beta, a_mu, b_mu, ztree_options=1, verb=1, reflect=TRUE, ...)
   ## tpxselect defaults: tmax=10000, wtol=10^(-4), qn=100, grp=NULL, admix=TRUE, nonzero=FALSE, dcut=-10
 {
   levels <- ceiling(log(dim(counts)[2])%%log(2));
