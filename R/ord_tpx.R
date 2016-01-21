@@ -24,7 +24,10 @@ tpxfit <- function(counts, X, param_set, del_beta, a_mu, b_mu,  tol, verb,
 {
   ## inputs and dimensions
   if(!inherits(X,"simple_triplet_matrix")){ stop("X needs to be a simple_triplet_matrix") }
-  K <- ncol(theta)
+  mu_tree_set <- mu_tree_build_set(param_set);
+  K <- length(param_set);
+  levels <- length(mu_tree_set[[1]]);
+  theta <- do.call(rbind, lapply(1:K, function(l) mu_tree_set[[l]][[levels]]/mu_tree_set[[l]][[1]]));
   n <- nrow(X)
   p <- ncol(X)
   m <- row_sums(X)

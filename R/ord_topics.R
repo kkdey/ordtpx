@@ -1,5 +1,6 @@
 ##### Estimation for Topic Models ######
 
+library(slam)
 ## intended main function; provides defaults and fits topic model for the user defined K
 ord_topics <- function(counts, K, shape=NULL, initopics=NULL, tol=0.1,
                   ord=TRUE, del_beta, a_mu, b_mu, verb=TRUE, ...)
@@ -12,7 +13,7 @@ ord_topics <- function(counts, K, shape=NULL, initopics=NULL, tol=0.1,
   p <- ncol(X)
   n <- nrow(X)
 
-  if(verb>0)
+  if(verb)
     cat(sprintf("\nEstimating on a %d document collection.\n", nrow(X)))
 
   ## check the prior parameters for theta
@@ -20,6 +21,7 @@ ord_topics <- function(counts, K, shape=NULL, initopics=NULL, tol=0.1,
 
   ## check the list of candidate K values
   if(K <=1){ stop(cat("use K values >= 2")) }
+  cat(sprintf("\nFitting a ordered topic model with %d topics \n", K))
 
   ## Null model log probability
   sx <- sum(X)
@@ -29,7 +31,7 @@ ord_topics <- function(counts, K, shape=NULL, initopics=NULL, tol=0.1,
 
   ## initialize
   levels <- log(dim(counts)[2])/log(2)+1;
-  theta_tree_start <- lapply(1:nclus, function(s) return(mra_tree_prior_theta(levels,del_beta)));
+  theta_tree_start <- lapply(1:K, function(s) return(mra_tree_prior_theta(levels,del_beta)));
 
   param_set_start <- param_extract_mu_tree(theta_tree_start);
 

@@ -66,7 +66,8 @@ z_tree_construct <- function(counts, omega_iter, theta_iter, ztree_options=c(1,2
   return(z_tree_out)
 }
 
-## Extract the beta parameters and the root mu parameter estimate from Z value MRA tree
+## Extract the beta parameters and the root or top level  mu parameter in a hierarchy of lists
+## from Z value MRA tree
 
 param_extract_ztree <- function(z_tree_in, del_beta, a_mu, b_mu)
 {
@@ -88,7 +89,8 @@ param_extract_ztree <- function(z_tree_in, del_beta, a_mu, b_mu)
   return(param_set)
 }
 
-## Build the tree of mu parameters given the Z value MRA tree
+## Build a set of mu trees across the topics, given the hierarchical loist structure of the beta values
+## and the top level mu value.
 
 mu_tree_build <- function(beta_tree, mu_top)
 {
@@ -96,12 +98,11 @@ mu_tree_build <- function(beta_tree, mu_top)
   mu_tree <- vector(mode="list", length=S);
   mu_tree[[1]] <- mu_top;
   for(s in 2:S){
-    mu_tree[[s]] <- as.vector(rbind(beta_tree[[(s-1)]]*mu_top, (1-beta_tree[[(s-1)]])*mu_top));
+    mu_tree[[s]] <- as.vector(rbind(beta_tree[[(s-1)]]*mu_tree[[(s-1)]], (1-beta_tree[[(s-1)]])*mu_tree[[(s-1)]]));
   }
   return(mu_tree)
 }
 
-## Build a set of mu trees across the topics
 
 mu_tree_build_set <- function(param_set)
 {
@@ -126,6 +127,9 @@ theta_tree_build_set <- function(mu_tree_set)
   })
   return(theta_tree_set)
 }
+
+## Extract the parameters (the beta values and top mu values) for all clusters in a hierarchical list structure
+## given the MRA tree structure of mu values for different clusters
 
 param_extract_mu_tree <- function(mu_tree_set)
 {
