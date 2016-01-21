@@ -1,10 +1,12 @@
 Package: ordtpx
-Type: Package
-Title: What the Package Does (Title Case)
-Version: 0.1
-Date: 2016-01-14
-Author: Who wrote it
-Maintainer: Who to complain to <yourfault@somewhere.net>
-Description: More about what it does (maybe more than one line)
-License: What license is it under?
-LazyData: TRUE
+Title:  Estimation of Topic Models with Ordered Features using Multi-resolution analysis
+Version: 0.0.1
+Author: Kushal K. Dey<kkdey@uchicago.edu>
+Depends: R (>= 2.10), slam
+Suggests: MASS, wavethresh
+Description:  Posterior maximization for topic models with features that have a relative ordering among them.
+Such a model finds its applications in phylogenetic abundance data patterns. This is a modification of the
+`maptpx` package due to Matt Taddy. If you want to take advantage of openmp parallelization, uncomment the relevant flags in src/MAKEVARS before compiling.
+Maintainer: Kushal K. Dey <kkdey@uchicago.edu>
+License: GPL-3
+URL: http://kkdey.github.io/
