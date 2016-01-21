@@ -1,1 +1,16 @@
-exportPattern("^[[:alpha:]]+")
+useDynLib(ordtpx)
+import(slam)
+
+export(stm_tfidf,
+       normalize,
+       rdir,
+       topics,
+       predict.topics,
+       topicVar,
+       expit,
+       logit)
+
+S3method(plot,topics)
+S3method(predict,topics)
+S3method(summary,topics)
+
