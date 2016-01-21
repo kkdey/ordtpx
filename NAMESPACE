@@ -4,4 +4,17 @@ import(slam)
 export(stm_tfidf,
        normalize,
        rdir,
-       ord_topics)
+       ord_topics,
+       mra_tree_prior_theta,
+       mra_tree_prior_mu,
+       extract_theta_tree_from_mu,
+       mra_bottom_up,
+       z_tree_construct,
+       param_extract_ztree,
+       mu_tree_build,
+       mu_tree_build_set,
+       theta_tree_build_set,
+       param_extract_mu_tree,
+       prior_calc_fn,
+       loglik_fn,
+       tpxlpost)
