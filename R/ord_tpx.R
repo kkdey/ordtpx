@@ -3,15 +3,15 @@
 ## ** Only referenced from topics.R
 
 ## check counts (can be an object from tm, slam, or a simple co-occurance matrix)
-CheckCounts <- function(counts){
-  if(class(counts)[1] == "TermDocumentMatrix"){ counts <- t(counts) }
-  if(is.null(dimnames(counts)[[1]])){ dimnames(counts)[[1]] <- paste("doc",1:nrow(counts)) }
-  if(is.null(dimnames(counts)[[2]])){ dimnames(counts)[[2]] <- paste("wrd",1:ncol(counts)) }
-  empty <- row_sums(counts) == 0
+CheckCounts <- function(fcounts){
+  if(class(fcounts)[1] == "TermDocumentMatrix"){ fcounts <- t(fcounts) }
+  if(is.null(dimnames(fcounts)[[1]])){ dimnames(fcounts)[[1]] <- paste("doc",1:nrow(fcounts)) }
+  if(is.null(dimnames(fcounts)[[2]])){ dimnames(fcounts)[[2]] <- paste("wrd",1:ncol(fcounts)) }
+  empty <- row_sums(fcounts) == 0
   if(sum(empty) != 0){
-    counts <- counts[!empty,]
+    fcounts <- fcounts[!empty,]
     cat(paste("Removed", sum(empty), "blank documents.\n")) }
-  return(as.simple_triplet_matrix(counts))
+  return(as.simple_triplet_matrix(fcounts))
 }
 
 
@@ -19,7 +19,7 @@ CheckCounts <- function(counts){
 
 ## ** main workhorse function.  Only Called by the above wrappers.
 ## topic estimation for a given number of topics (taken as ncol(theta))
-tpxfit <- function(counts, X, param_set, del_beta, a_mu, b_mu, ztree_options, tol, verb,
+tpxfit <- function(fcounts, X, param_set, del_beta, a_mu, b_mu, ztree_options, tol, verb,
                    admix, grp, tmax, wtol, qn)
 {
   ## inputs and dimensions
@@ -50,7 +50,7 @@ tpxfit <- function(counts, X, param_set, del_beta, a_mu, b_mu, ztree_options, to
 
   Y <- NULL # only used for qn > 0
   Q0 <- col_sums(X)/sum(X)
-  L <- tpxlpost(counts, omega=omega, param_set=param_set, del_beta, a_mu, b_mu, ztree_options=1);
+  L <- tpxlpost(fcounts, omega=omega, param_set=param_set, del_beta, a_mu, b_mu, ztree_options=1);
  # if(is.infinite(L)){ L <- sum( (log(Q0)*col_sums(X))[Q0>0] ) }
 
   ## Iterate towards MAP
@@ -64,7 +64,7 @@ tpxfit <- function(counts, X, param_set, del_beta, a_mu, b_mu, ztree_options, to
 
     ## Construct the MRA of z-values given the current iterates of omega /theta
 
-    z_tree <- z_tree_construct(counts, omega_iter = Wfit, theta_iter = t(theta), ztree_options = 1);
+    z_tree <- z_tree_construct(fcounts, omega_iter = Wfit, theta_iter = t(theta), ztree_options = 1);
 
     ## Extract the beta and mu_0 parameters from the MRA tree
 
@@ -85,7 +85,7 @@ tpxfit <- function(counts, X, param_set, del_beta, a_mu, b_mu, ztree_options, to
     ## move <- tpxEM(X=X, m=m, theta=theta, omega=Wfit, alpha=alpha, admix=admix, grp=grp)
 
     ## quasinewton-newton acceleration
-    QNup <- tpxQN(move=move, counts=counts, Y=Y, X=X, del_beta=del_beta, a_mu=a_mu, b_mu=b_mu,
+    QNup <- tpxQN(move=move, fcounts=fcounts, Y=Y, X=X, del_beta=del_beta, a_mu=a_mu, b_mu=b_mu,
                   ztree_options=ztree_options, verb=verb, admix=admix, grp=grp, doqn=qn-dif)
     move <- QNup$move
     Y <- QNup$Y
@@ -93,13 +93,13 @@ tpxfit <- function(counts, X, param_set, del_beta, a_mu, b_mu, ztree_options, to
     if(QNup$L < L){  # happens on bad Wfit, so fully reverse
       if(verb > 10){ cat("_reversing a step_") }
       ##move <- tpxEM(X=X, m=m, theta=theta, omega=omega, alpha=alpha, admix=admix, grp=grp)
-      z_tree <- z_tree_construct(counts, omega_iter = omega, theta_iter = t(theta), ztree_options = 1);
+      z_tree <- z_tree_construct(fcounts, omega_iter = omega, theta_iter = t(theta), ztree_options = 1);
       param_set_fit <- param_extract_ztree(z_tree, del_beta, a_mu, b_mu);
       mu_tree_set_fit <- mu_tree_build_set(param_set_fit);
       levels <- length(mu_tree_set_fit[[1]]);
       theta_fit <- do.call(cbind, lapply(1:nclus, function(l) mu_tree_set_fit[[l]][[levels]]/mu_tree_set_fit[[l]][[1]]));
       move <- list(theta=theta_fit, omega=omega);
-      QNup$L <-  tpxlpost(counts, move$omega, param_set_fit, del_beta, a_mu, b_mu, ztree_options=1) }
+      QNup$L <-  tpxlpost(fcounts, move$omega, param_set_fit, del_beta, a_mu, b_mu, ztree_options=1) }
 
     ## calculate dif
     dif <- (QNup$L-L)
@@ -131,7 +131,7 @@ tpxfit <- function(counts, X, param_set, del_beta, a_mu, b_mu, ztree_options, to
   }
 
   ## final log posterior
-  L <- tpxlpost(counts, omega, param_set, del_beta, a_mu, b_mu, ztree_options=1);
+  L <- tpxlpost(fcounts, omega, param_set, del_beta, a_mu, b_mu, ztree_options=1);
 
   ## summary print
   if(verb>0){
@@ -171,12 +171,12 @@ tpxweights <- function(n, p, xvo, wrd, doc, start, theta, verb=FALSE, nef=TRUE, 
 
 
 ## Quasi Newton update for q>0
-tpxQN <- function(move, counts, Y, X, del_beta, a_mu, b_mu, ztree_options, verb, admix, grp, doqn)
+tpxQN <- function(move, fcounts, Y, X, del_beta, a_mu, b_mu, ztree_options, verb, admix, grp, doqn)
 {
   ## always check likelihood
   theta_tree_set_in <- lapply(1:K, function(k) mra_bottom_up(move$theta[,k]));
   param_set_in <- param_extract_mu_tree(theta_tree_set_in)
-  L <- tpxlpost(counts, move$omega, param_set_in, del_beta, a_mu, b_mu, ztree_options)
+  L <- tpxlpost(fcounts, move$omega, param_set_in, del_beta, a_mu, b_mu, ztree_options)
 
   if(doqn < 0){ return(list(move=move, L=L, Y=Y)) }
 

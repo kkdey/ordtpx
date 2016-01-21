@@ -4,10 +4,18 @@ ord_topics <- function(counts, K, shape=NULL, initopics=NULL, tol=0.1,
                   ord=TRUE, del_beta, a_mu, b_mu, ztree_options=1, verb=1, ...)
   ## tpxselect defaults: tmax=10000, wtol=10^(-4), qn=100, grp=NULL, admix=TRUE, nonzero=FALSE, dcut=-10
 {
-  if(log(dim(counts)[2])%%log(2)!=0) stop("number of features not a power of 2")
+  levels <- ceiling(log(dim(counts)[2])%%log(2));
+  if(log(dim(counts)[2])%%log(2)!=0) {
+    cat(sprintf("number of features not a power of 2"));
+    if(reflect){
+      fcounts <- cbind(counts, counts[,rev(dim(counts)[2]+(1:2^{ceil}-dim(counts)[2]))]);
+    }
+    if(!reflect){
+      fcounts <- cbind(counts, matrix(0, dim(counts)[1], 2^{ceil}-dim(counts)[2]));
+    }}
 
   ## Convert the counts matrix to triplet matrix
-  X <- CheckCounts(counts)
+  X <- CheckCounts(fcounts)
   p <- ncol(X)
   n <- nrow(X)
 
@@ -28,12 +36,11 @@ ord_topics <- function(counts, K, shape=NULL, initopics=NULL, tol=0.1,
 
 
   ## initialize
-  levels <- log(dim(counts)[2])/log(2)+1;
   theta_tree_start <- lapply(1:K, function(s) return(mra_tree_prior_theta(levels,del_beta)));
 
   param_set_start <- param_extract_mu_tree(theta_tree_start);
 
-  fit <- tpxfit(counts=counts, X=X, param_set=param_set_start, del_beta=del_beta, a_mu=a_mu, b_mu=b_mu,
+  fit <- tpxfit(fcounts=fcounts, X=X, param_set=param_set_start, del_beta=del_beta, a_mu=a_mu, b_mu=b_mu,
                 ztree_options=ztree_options, tol=tol, verb=verb, admix=admix, grp=grp, tmax=tmax, wtol=wtol,
                 qn=qn);
 
