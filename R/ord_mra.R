@@ -160,6 +160,7 @@ prior_calc_fn <- function(param_set_in, del_beta, a_mu, b_mu)
 {
   nlevels <- length(del_beta);
   beta_set_across_classes <- vector(mode="list",length=nlevels)
+  nclus <- length(param_set_in);
 
   for(l in 1:(nlevels))
   {
@@ -182,6 +183,7 @@ prior_calc_fn <- function(param_set_in, del_beta, a_mu, b_mu)
 
 loglik_fn <- function(z_tree, param_set)
 {
+  nclus <- length(z_tree)
   fn_out <- sum(unlist(parallel::mclapply(1:nclus, function(k)
   {
     intree <- z_tree[[k]];

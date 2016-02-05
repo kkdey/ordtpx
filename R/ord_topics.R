@@ -60,7 +60,7 @@ ord_topics <- function(counts, K, shape=NULL, initopics=NULL, tol=0.1,
   else{ worder <- 1:K }
   ## Main parameters
   mu_tree_set <- mu_tree_build_set(fit$param_set);
-  theta <- do.call(cbind, lapply(1:nclus, function(l) mu_tree_set[[l]][[levels]]/mu_tree_set[[l]][[1]]));
+  theta <- do.call(cbind, lapply(1:K, function(l) mu_tree_set[[l]][[levels]]/mu_tree_set[[l]][[1]]));
   theta=matrix(theta[,worder], ncol=K, dimnames=list(phrase=dimnames(X)[[2]], topic=paste(1:K)) )
   omega=matrix(fit$omega[,worder], ncol=K, dimnames=list(document=NULL, topic=paste(1:K)) )
   if(nrow(omega)==nrow(X)){ dimnames(omega)[[1]] <- dimnames(X)[[1]] }
