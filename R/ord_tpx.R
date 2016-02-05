@@ -78,7 +78,7 @@ tpxfit <- function(fcounts, X, param_set, del_beta, a_mu, b_mu, ztree_options, t
     ## Extract the theta updates from the MRA tree
 
     levels <- length(mu_tree_set_fit[[1]]);
-    theta_fit <- do.call(cbind, lapply(1:nclus, function(l) mu_tree_set_fit[[l]][[levels]]/mu_tree_set_fit[[l]][[1]]));
+    theta_fit <- do.call(cbind, lapply(1:K, function(l) mu_tree_set_fit[[l]][[levels]]/mu_tree_set_fit[[l]][[1]]));
     move <- list(theta=theta_fit, omega=Wfit);
 
     ## joint parameter EM update
@@ -88,7 +88,7 @@ tpxfit <- function(fcounts, X, param_set, del_beta, a_mu, b_mu, ztree_options, t
     QNup <- tpxQN(move=move, fcounts=fcounts, Y=Y, X=X, del_beta=del_beta, a_mu=a_mu, b_mu=b_mu,
                   ztree_options=ztree_options, verb=verb, admix=admix, grp=grp, doqn=qn-dif)
     move <- QNup$move
-    #Y <- QNup$Y
+    Y <- QNup$Y
 
     if(QNup$L < L){  # happens on bad Wfit, so fully reverse
       if(verb > 10){ cat("_reversing a step_") }
@@ -97,7 +97,7 @@ tpxfit <- function(fcounts, X, param_set, del_beta, a_mu, b_mu, ztree_options, t
       param_set_fit <- param_extract_ztree(z_tree, del_beta, a_mu, b_mu);
       mu_tree_set_fit <- mu_tree_build_set(param_set_fit);
       levels <- length(mu_tree_set_fit[[1]]);
-      theta_fit <- do.call(cbind, lapply(1:nclus, function(l) mu_tree_set_fit[[l]][[levels]]/mu_tree_set_fit[[l]][[1]]));
+      theta_fit <- do.call(cbind, lapply(1:K, function(l) mu_tree_set_fit[[l]][[levels]]/mu_tree_set_fit[[l]][[1]]));
       move <- list(theta=theta_fit, omega=omega);
       QNup$L <-  tpxlpost(fcounts, move$omega, move$theta, param_set_fit, del_beta, a_mu, b_mu, ztree_options=1) }
 
@@ -181,8 +181,17 @@ tpxQN <- function(move, fcounts, Y, X, del_beta, a_mu, b_mu, ztree_options, verb
 
   if(doqn < 0){ return(list(move=move, L=L, Y=Y)) }
 
+  temp_omega <- move$omega;
+  temp_theta <- move$theta;
+
+  temp_omega[temp_omega==1]=0.9999
+  temp_omega[temp_omega==0]=(1-0.9999)/(K-1)
+
+  temp_theta[temp_theta==1]=0.9999
+  temp_theta[temp_theta==0]=0.00001
+
   ## update Y accounting
-  Y <- cbind(Y, tpxToNEF(theta=move$theta, omega=move$omega))
+  Y <- cbind(Y, tpxToNEF(theta=temp_theta, omega=temp_omega))
   if(ncol(Y) < 3){ return(list(Y=Y, move=move, L=L)) }
   if(ncol(Y) > 3){ warning("mis-specification in quasi-newton update; please report this bug.") }
 
@@ -198,7 +207,7 @@ tpxQN <- function(move, fcounts, Y, X, del_beta, a_mu, b_mu, ztree_options, verb
   ## check for a likelihood improvement
   theta_tree_set_nup <- lapply(1:K, function(k) mra_bottom_up(qnup$theta[,k]));
   param_set_nup <- param_extract_mu_tree(theta_tree_set_nup)
-  Lqnup <- try(tpxlpost(X=X, qnup$omega, param_set_nup, del_beta, a_mu, b_mu, ztree_options), silent=TRUE)
+  Lqnup <- try(tpxlpost(X=X, qnup$omega, qnup$theta, param_set_nup, del_beta, a_mu, b_mu, ztree_options), silent=TRUE)
 
 
   if(inherits(Lqnup, "try-error")){

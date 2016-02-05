@@ -12,8 +12,9 @@ ord_topics <- function(counts, K, shape=NULL, initopics=NULL, tol=0.1,
     }
     if(!reflect){
       fcounts <- cbind(counts, matrix(0, dim(counts)[1], 2^{ceil}-dim(counts)[2]));
-    }}
-  else{ fcounts <- counts}
+    }}else{
+    fcounts <- counts;
+  }
 
   levels <- ceil+1;
 
