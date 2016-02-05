@@ -156,11 +156,11 @@ param_extract_mu_tree <- function(mu_tree_set)
 ## Prior calculation given the beta values and the top mu value (parameters we can extract from param_extract_mu_tree
 ## or param_extract_ztree)
 
-prior_calc_fn <- function(param_set_in, del_beta, a_mu, b_mu)
+prior_calc_fn <- function(param_set, del_beta, a_mu, b_mu)
 {
   nlevels <- length(del_beta);
   beta_set_across_classes <- vector(mode="list",length=nlevels)
-  nclus <- length(param_set_in);
+  nclus <- length(param_set);
 
   for(l in 1:(nlevels))
   {
@@ -202,7 +202,7 @@ loglik_fn <- function(z_tree, param_set)
 
 tpxlpost <- function(counts, omega_iter, theta_iter, param_set, del_beta, a_mu, b_mu, ztree_options=c(1,2))
 {
-  z_tree <- z_tree_construct(counts, omega_iter = omega_iter, theta_iter = t(theta_iter), ztree_options = 1)
+  z_tree <- z_tree_construct(counts, omega_iter, t(theta_iter), ztree_options = 1)
   loglik_value <- loglik_fn(z_tree, param_set = param_set);
   prior_calc <- prior_calc_fn(param_set, del_beta, a_mu, b_mu);
   prior_omega <- (1/dim(omega_iter)[2])*sum(log(omega_iter[omega_iter > 0]))
