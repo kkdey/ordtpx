@@ -28,3 +28,4 @@ export(stm_tfidf,
        tpxToNEF,
        tpxFromNEF,
        ord_topics)
+

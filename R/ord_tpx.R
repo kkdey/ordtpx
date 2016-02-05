@@ -50,7 +50,7 @@ tpxfit <- function(fcounts, X, param_set, del_beta, a_mu, b_mu, ztree_options, t
 
   Y <- NULL # only used for qn > 0
   Q0 <- col_sums(X)/sum(X)
-  L <- tpxlpost(fcounts, omega=omega, param_set=param_set, del_beta, a_mu, b_mu, ztree_options=1);
+  L <- tpxlpost(fcounts, omega_iter = omega, theta_iter = theta, param_set=param_set, del_beta, a_mu, b_mu, ztree_options=1);
  # if(is.infinite(L)){ L <- sum( (log(Q0)*col_sums(X))[Q0>0] ) }
 
   ## Iterate towards MAP
@@ -60,7 +60,7 @@ tpxfit <- function(fcounts, X, param_set, del_beta, a_mu, b_mu, ztree_options, t
 
     if(admix && wtol > 0){ Wfit <- tpxweights(n=nrow(X), p=ncol(X), xvo=xvo, wrd=wrd, doc=doc,
                                 start=omega, theta=theta,  verb=0, nef=TRUE, wtol=wtol, tmax=20) }
-    else{ Wfit <- omega }
+    if(!admix | wtol <=0){ Wfit <- omega }
 
     ## Construct the MRA of z-values given the current iterates of omega /theta
 
@@ -88,7 +88,7 @@ tpxfit <- function(fcounts, X, param_set, del_beta, a_mu, b_mu, ztree_options, t
     QNup <- tpxQN(move=move, fcounts=fcounts, Y=Y, X=X, del_beta=del_beta, a_mu=a_mu, b_mu=b_mu,
                   ztree_options=ztree_options, verb=verb, admix=admix, grp=grp, doqn=qn-dif)
     move <- QNup$move
-    Y <- QNup$Y
+    #Y <- QNup$Y
 
     if(QNup$L < L){  # happens on bad Wfit, so fully reverse
       if(verb > 10){ cat("_reversing a step_") }
@@ -99,7 +99,7 @@ tpxfit <- function(fcounts, X, param_set, del_beta, a_mu, b_mu, ztree_options, t
       levels <- length(mu_tree_set_fit[[1]]);
       theta_fit <- do.call(cbind, lapply(1:nclus, function(l) mu_tree_set_fit[[l]][[levels]]/mu_tree_set_fit[[l]][[1]]));
       move <- list(theta=theta_fit, omega=omega);
-      QNup$L <-  tpxlpost(fcounts, move$omega, param_set_fit, del_beta, a_mu, b_mu, ztree_options=1) }
+      QNup$L <-  tpxlpost(fcounts, move$omega, move$theta, param_set_fit, del_beta, a_mu, b_mu, ztree_options=1) }
 
     ## calculate dif
     dif <- (QNup$L-L)
@@ -131,7 +131,7 @@ tpxfit <- function(fcounts, X, param_set, del_beta, a_mu, b_mu, ztree_options, t
   }
 
   ## final log posterior
-  L <- tpxlpost(fcounts, omega, param_set, del_beta, a_mu, b_mu, ztree_options=1);
+  L <- tpxlpost(fcounts, omega, theta, param_set, del_beta, a_mu, b_mu, ztree_options=1);
 
   ## summary print
   if(verb>0){
@@ -174,9 +174,10 @@ tpxweights <- function(n, p, xvo, wrd, doc, start, theta, verb=FALSE, nef=TRUE, 
 tpxQN <- function(move, fcounts, Y, X, del_beta, a_mu, b_mu, ztree_options, verb, admix, grp, doqn)
 {
   ## always check likelihood
+  K <- ncol(move$theta);
   theta_tree_set_in <- lapply(1:K, function(k) mra_bottom_up(move$theta[,k]));
   param_set_in <- param_extract_mu_tree(theta_tree_set_in)
-  L <- tpxlpost(fcounts, move$omega, param_set_in, del_beta, a_mu, b_mu, ztree_options)
+  L <- tpxlpost(fcounts, move$omega, move$theta, param_set_in, del_beta, a_mu, b_mu, ztree_options)
 
   if(doqn < 0){ return(list(move=move, L=L, Y=Y)) }
 

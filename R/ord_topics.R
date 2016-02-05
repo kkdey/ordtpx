@@ -4,16 +4,18 @@ ord_topics <- function(counts, K, shape=NULL, initopics=NULL, tol=0.1,
                   ord=TRUE, del_beta, a_mu, b_mu, ztree_options=1, verb=1, reflect=TRUE,
                   tmax=10000, wtol=10^(-4), qn=100, grp=NULL, admix=TRUE, nonzero=FALSE, dcut=-10)
 {
-  levels <- ceiling(log(dim(counts)[2])/log(2))+1;
+  ceil <- ceiling(log(dim(counts)[2])/log(2));
   if(log(dim(counts)[2])%%log(2)!=0) {
     cat(sprintf("number of features not a power of 2"));
     if(reflect){
-      fcounts <- cbind(counts, counts[,rev(dim(counts)[2]+(1:2^{ceil}-dim(counts)[2]))]);
+      fcounts <- cbind(counts, counts[,dim(counts)[2]-(1:(2^{ceil}-dim(counts)[2]))]);
     }
     if(!reflect){
       fcounts <- cbind(counts, matrix(0, dim(counts)[1], 2^{ceil}-dim(counts)[2]));
     }}
   else{ fcounts <- counts}
+
+  levels <- ceil+1;
 
   ## Convert the counts matrix to triplet matrix
   X <- CheckCounts(fcounts)
