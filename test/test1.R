@@ -21,7 +21,7 @@ omega_iter <- rbind(c(0.5,0.5),c(0.8,0.2),c(0.1,0.9));
 
 counts <- t(do.call(cbind,lapply(1:dim(omega_iter)[1], function(x) rmultinom(1,1000,prob=omega_iter[x,]%*%theta_iter))));
 
-system.time(ord_topics <- ordtpx::ord_topics(counts,K=2, del_beta = c(2,3,4), a_mu=2, b_mu=3, ztree_options=2, tol=0.001));
+system.time(ord_topics <- ordtpx::ord_topics(counts,K=2, del_beta = c(2,9,5), a_mu=2, b_mu=3, ztree_options=2, tol=0.001));
 system.time(map_topics <- maptpx::topics(counts, K=2, tol=0.001));
 
 
