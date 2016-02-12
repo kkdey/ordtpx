@@ -311,3 +311,44 @@ tpxFromNEF <- function(Y, n, p, K){
   return(list(omega=t( matrix(bck$tomega, nrow=K) ), theta=matrix(bck$theta, ncol=K)))
 }
 
+tpxinit <- function(fcounts, X, K1, alpha, verb, param_set, del_beta, a_mu, b_mu,
+                    ztree_options, tol, admix, grp, tmax, wtol, qn){
+  ## initheta can be matrix, or c(nK, tmax, tol, verb)
+  ini_mu_tree_set <- mu_tree_build_set(param_set);
+  levels <- length(ini_mu_tree_set[[1]]);
+  initheta <- do.call(cbind, lapply(1:K1, function(l) ini_mu_tree_set[[l]][[levels]]/ini_mu_tree_set[[l]][[1]]));
+
+  if(is.matrix(initheta)){
+    if(ncol(initheta)!=K1){ stop("mis-match between initheta and K.") }
+    if(prod(initheta>0) != 1){ stop("use probs > 0 for initheta.") }
+    return(normalize(initheta, byrow=FALSE)) }
+
+  if(is.matrix(alpha)){
+    if(nrow(alpha)!=ncol(X) || ncol(alpha)!=K1){ stop("bad matrix alpha dimensions; check your K") }
+    return(normalize(alpha, byrow=FALSE)) }
+
+  if(is.null(initheta)){ ilength <- K1-1 }
+  else{ ilength <- initheta[1] }
+  if(ilength < 1){ ilength <- 1 }
+
+  ## set number of initial steps
+  if(length(initheta)>1){ tmax <- initheta[2] }else{ tmax <- 3 }
+  ## set the tolerance
+  if(length(initheta)>2){ tol <- initheta[3] }else{ tol <- 0.5 }
+  ## print option
+  if(length(initheta)>3){ verb <- initheta[4] }else{ verb <- 0 }
+
+
+  if(verb){ cat("Building initial topics")
+    if(verb > 1){ cat(" for K = ") }
+    else{ cat("... ") } }
+
+
+    ## Solve for map omega in NEF space
+    fit <- tpxfit(fcounts=fcounts, X=X, param_set=param_set, del_beta=del_beta, a_mu=a_mu, b_mu=b_mu,
+                  ztree_options=ztree_options, tol=tol, verb=verb, admix=TRUE, grp=NULL, tmax=tmax, wtol=-1,
+                  qn=-1);
+
+  initheta <- fit$theta;
+  return(initheta)
+}

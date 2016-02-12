@@ -38,13 +38,20 @@ ord_topics <- function(counts, K, shape=NULL, initopics=NULL, tol=0.1,
   qnull <- col_sums(X)/sx
   null <- sum( X$v*log(qnull[X$j]) ) - 0.5*(n+p)*(log(sx) - log(2*pi))
 
-
   ## initialize
   theta_tree_start <- lapply(1:K, function(s) return(mra_tree_prior_theta(levels,del_beta)));
 
   param_set_start <- param_extract_mu_tree(theta_tree_start);
 
-  fit <- tpxfit(fcounts=fcounts, X=X, param_set=param_set_start, del_beta=del_beta, a_mu=a_mu, b_mu=b_mu,
+
+  initopics_theta <- tpxinit(fcounts[1:min(ceiling(nrow(X)*.05),100),], X[1:min(ceiling(nrow(X)*.05),100),], K, shape,
+                       verb, param_set_start, del_beta, a_mu, b_mu, ztree_options, tol,
+                       admix, grp, tmax, wtol, qn);
+
+  initopics_theta_tree_set <- lapply(1:K, function(k) mra_bottom_up(initopics_theta[,k]));
+  initopics_param_set <- param_extract_mu_tree(initopics_theta_tree_set)
+
+  fit <- tpxfit(fcounts=fcounts, X=X, param_set=initopics_param_set, del_beta=del_beta, a_mu=a_mu, b_mu=b_mu,
                 ztree_options=ztree_options, tol=tol, verb=verb, admix=admix, grp=grp, tmax=tmax, wtol=wtol,
                 qn=qn);
 
@@ -56,8 +63,7 @@ ord_topics <- function(counts, K, shape=NULL, initopics=NULL, tol=0.1,
   ## K <- tpx$K
 
   ## clean up and out
-  if(ord){ worder <- order(col_sums(fit$omega), decreasing=TRUE) } # order by decreasing usage
-  else{ worder <- 1:K }
+  if(ord){ worder <- order(col_sums(fit$omega), decreasing=TRUE) } else{ worder <- 1:K }
   ## Main parameters
   mu_tree_set <- mu_tree_build_set(fit$param_set);
   theta <- do.call(cbind, lapply(1:K, function(l) mu_tree_set[[l]][[levels]]/mu_tree_set[[l]][[1]]));
