@@ -19,8 +19,8 @@ CheckCounts <- function(fcounts){
 
 ## ** main workhorse function.  Only Called by the above wrappers.
 ## topic estimation for a given number of topics (taken as ncol(theta))
-tpxfit <- function(fcounts, X, param_set, del_beta, a_mu, b_mu, ztree_options, tol, verb,
-                   admix, grp, tmax, wtol, qn)
+ord.tpxfit <- function(fcounts, X, param_set, del_beta, a_mu, b_mu, ztree_options, tol, verb,
+                   admix, grp, tmax, wtol, qn, acc)
 {
   ## inputs and dimensions
   if(!inherits(X,"simple_triplet_matrix")){ stop("X needs to be a simple_triplet_matrix") }
@@ -38,7 +38,7 @@ tpxfit <- function(fcounts, X, param_set, del_beta, a_mu, b_mu, ztree_options, t
   doc <- c(0,cumsum(as.double(table(factor(X$i, levels=c(1:nrow(X)))))))
 
   ## Initialize
-  omega <- tpxweights(n=n, p=p, xvo=xvo, wrd=wrd, doc=doc, start=tpxOmegaStart(X,theta), theta=theta)
+  omega <- ord.tpxweights(n=n, p=p, xvo=xvo, wrd=wrd, doc=doc, start=ord.tpxOmegaStart(X,theta), theta=theta)
 
   ## tracking
   iter <- 0
@@ -50,7 +50,7 @@ tpxfit <- function(fcounts, X, param_set, del_beta, a_mu, b_mu, ztree_options, t
 
   Y <- NULL # only used for qn > 0
   Q0 <- col_sums(X)/sum(X)
-  L <- tpxlpost(fcounts, omega_iter = omega, theta_iter = theta, param_set=param_set, del_beta, a_mu, b_mu, ztree_options=1);
+  L <- ord.tpxlpost(fcounts, omega_iter = omega, theta_iter = theta, param_set=param_set, del_beta, a_mu, b_mu, ztree_options=1);
  # if(is.infinite(L)){ L <- sum( (log(Q0)*col_sums(X))[Q0>0] ) }
 
   ## Iterate towards MAP
@@ -58,7 +58,7 @@ tpxfit <- function(fcounts, X, param_set, del_beta, a_mu, b_mu, ztree_options, t
 
     ## sequential quadratic programming for conditional Y solution
 
-    if(admix && wtol > 0){ Wfit <- tpxweights(n=nrow(X), p=ncol(X), xvo=xvo, wrd=wrd, doc=doc,
+    if(admix && wtol > 0){ Wfit <- ord.tpxweights(n=nrow(X), p=ncol(X), xvo=xvo, wrd=wrd, doc=doc,
                                 start=omega, theta=theta,  verb=0, nef=TRUE, wtol=wtol, tmax=20) }
     if(!admix | wtol <=0){ Wfit <- omega }
 
@@ -81,14 +81,23 @@ tpxfit <- function(fcounts, X, param_set, del_beta, a_mu, b_mu, ztree_options, t
     theta_fit <- do.call(cbind, lapply(1:K, function(l) mu_tree_set_fit[[l]][[levels]]/mu_tree_set_fit[[l]][[1]]));
     move <- list(theta=theta_fit, omega=Wfit);
 
+    if(!acc){
+      z_tree <- z_tree_construct(fcounts, omega_iter = move$omega, theta_iter = t(move$theta), ztree_options = 1);
+      param_set_fit <- param_extract_ztree(z_tree, del_beta, a_mu, b_mu);
+      L_new <- ord.tpxlpost(fcounts, move$omega, move$theta, param_set_fit, del_beta, a_mu, b_mu, ztree_options=1)
+      QNup <- list("move"=move, "L"=L_new, "Y"=NULL)
+      Y <- QNup$Y
+    }
     ## joint parameter EM update
     ## move <- tpxEM(X=X, m=m, theta=theta, omega=Wfit, alpha=alpha, admix=admix, grp=grp)
 
+    if(acc){
     ## quasinewton-newton acceleration
-    QNup <- tpxQN(move=move, fcounts=fcounts, Y=Y, X=X, del_beta=del_beta, a_mu=a_mu, b_mu=b_mu,
+    QNup <- ord.tpxQN(move=move, fcounts=fcounts, Y=Y, del_beta=del_beta, a_mu=a_mu, b_mu=b_mu,
                   ztree_options=ztree_options, verb=verb, admix=admix, grp=grp, doqn=qn-dif)
     move <- QNup$move
     Y <- QNup$Y
+    }
 
     if(QNup$L < L){  # happens on bad Wfit, so fully reverse
       if(verb > 10){ cat("_reversing a step_") }
@@ -99,7 +108,7 @@ tpxfit <- function(fcounts, X, param_set, del_beta, a_mu, b_mu, ztree_options, t
       levels <- length(mu_tree_set_fit[[1]]);
       theta_fit <- do.call(cbind, lapply(1:K, function(l) mu_tree_set_fit[[l]][[levels]]/mu_tree_set_fit[[l]][[1]]));
       move <- list(theta=theta_fit, omega=omega);
-      QNup$L <-  tpxlpost(fcounts, move$omega, move$theta, param_set_fit, del_beta, a_mu, b_mu, ztree_options=1) }
+      QNup$L <-  ord.tpxlpost(fcounts, move$omega, move$theta, param_set_fit, del_beta, a_mu, b_mu, ztree_options=1) }
 
     ## calculate dif
     dif <- (QNup$L-L)
@@ -113,7 +122,7 @@ tpxfit <- function(fcounts, X, param_set, del_beta, a_mu, b_mu, ztree_options, t
 
     ## print
     if(verb>0 && (iter-1)%%ceiling(10/verb)==0 && iter>0){
-      cat( paste( round(dif,digits), #" (", sum(abs(theta-move$theta)),")",
+      cat( paste( round(abs(dif),digits), #" (", sum(abs(theta-move$theta)),")",
                  ", ", sep="") ) }
 
     ## heartbeat for long jobs
@@ -131,7 +140,7 @@ tpxfit <- function(fcounts, X, param_set, del_beta, a_mu, b_mu, ztree_options, t
   }
 
   ## final log posterior
-  L <- tpxlpost(fcounts, omega, theta, param_set, del_beta, a_mu, b_mu, ztree_options=1);
+  L <- ord.tpxlpost(fcounts, omega, theta, param_set, del_beta, a_mu, b_mu, ztree_options=1);
 
   ## summary print
   if(verb>0){
@@ -146,7 +155,7 @@ tpxfit <- function(fcounts, X, param_set, del_beta, a_mu, b_mu, ztree_options, t
 
 ## ** called from topics.R (predict) and tpx.R
 ## Conditional solution for topic weights given theta
-tpxweights <- function(n, p, xvo, wrd, doc, start, theta, verb=FALSE, nef=TRUE, wtol=10^{-5}, tmax=1000)
+ord.tpxweights <- function(n, p, xvo, wrd, doc, start, theta, verb=FALSE, nef=TRUE, wtol=10^{-5}, tmax=1000)
 {
   K <- ncol(theta)
   start[start == 0] <- 0.1/K
@@ -171,24 +180,27 @@ tpxweights <- function(n, p, xvo, wrd, doc, start, theta, verb=FALSE, nef=TRUE, 
 
 
 ## Quasi Newton update for q>0
-tpxQN <- function(move, fcounts, Y, X, del_beta, a_mu, b_mu, ztree_options, verb, admix, grp, doqn)
+ord.tpxQN <- function(move, fcounts, Y, del_beta, a_mu, b_mu, ztree_options, verb, admix, grp, doqn)
 {
   ## always check likelihood
   K <- ncol(move$theta);
   theta_tree_set_in <- lapply(1:K, function(k) mra_bottom_up(move$theta[,k]));
   param_set_in <- param_extract_mu_tree(theta_tree_set_in)
-  L <- tpxlpost(fcounts, move$omega, move$theta, param_set_in, del_beta, a_mu, b_mu, ztree_options)
+  L <- ord.tpxlpost(fcounts, move$omega, move$theta, param_set_in, del_beta, a_mu, b_mu, ztree_options)
 
   if(doqn < 0){ return(list(move=move, L=L, Y=Y)) }
 
   temp_omega <- move$omega;
   temp_theta <- move$theta;
 
-  temp_omega[temp_omega==1]=0.9999
-  temp_omega[temp_omega==0]=(1-0.9999)/(K-1)
+  temp_omega[temp_omega==1]=1 - 1e-05
+  temp_omega[temp_omega==0]=1e-05
 
-  temp_theta[temp_theta==1]=0.9999
-  temp_theta[temp_theta==0]=0.00001
+  temp_theta[temp_theta==1]=1 - 1e-05
+  temp_theta[temp_theta==0]=1e-05
+
+  temp_omega <- ord.normalizetpx(temp_omega, byrow=TRUE)
+  temp_theta <- ord.normalizetpx(temp_theta, byrow=FALSE)
 
   ## update Y accounting
   Y <- cbind(Y, tpxToNEF(theta=temp_theta, omega=temp_omega))
@@ -207,7 +219,7 @@ tpxQN <- function(move, fcounts, Y, X, del_beta, a_mu, b_mu, ztree_options, verb
   ## check for a likelihood improvement
   theta_tree_set_nup <- lapply(1:K, function(k) mra_bottom_up(qnup$theta[,k]));
   param_set_nup <- param_extract_mu_tree(theta_tree_set_nup)
-  Lqnup <- try(tpxlpost(X=X, qnup$omega, qnup$theta, param_set_nup, del_beta, a_mu, b_mu, ztree_options), silent=TRUE)
+  Lqnup <- try(ord.tpxlpost(fcounts, qnup$omega, qnup$theta, param_set_nup, del_beta, a_mu, b_mu, ztree_options), silent=TRUE)
 
 
   if(inherits(Lqnup, "try-error")){
@@ -226,21 +238,21 @@ tpxQN <- function(move, fcounts, Y, X, del_beta, a_mu, b_mu, ztree_options, verb
 }
 
 
-tpxOmegaStart <- function(X, theta)
+ord.tpxOmegaStart <- function(X, theta)
   {
     if(!inherits(X,"simple_triplet_matrix")){ stop("X needs to be a simple_triplet_matrix.") }
     omega <- try(tcrossprod_simple_triplet_matrix(X, solve(t(theta)%*%theta)%*%t(theta)), silent=TRUE )
     if(inherits(omega,"try-error")){ return( matrix( 1/ncol(theta), nrow=nrow(X), ncol=ncol(theta) ) ) }
     omega[omega <= 0] <- .5
-    return( normalize(omega, byrow=TRUE) )
+    return( ord.normalizetpx(omega, byrow=TRUE) )
   }
 
 
 ## fast computation of sparse P(X) for X>0
-tpxQ <- function(theta, omega, doc, wrd){
+ord.tpxQ <- function(theta, omega, doc, wrd){
 
-  if(length(wrd)!=length(doc)){stop("index mis-match in tpxQ") }
-  if(ncol(omega)!=ncol(theta)){stop("theta/omega mis-match in tpxQ") }
+  if(length(wrd)!=length(doc)){stop("index mis-match in ord.tpxQ") }
+  if(ncol(omega)!=ncol(theta)){stop("theta/omega mis-match in ord.tpxQ") }
 
   out <- .C("RcalcQ",
             n = as.integer(nrow(omega)),
@@ -257,7 +269,7 @@ tpxQ <- function(theta, omega, doc, wrd){
   return( out$q ) }
 
 ## model and component likelihoods for mixture model
-tpxMixQ <- function(X, omega, theta, grp=NULL, qhat=FALSE){
+ord.tpxMixQ <- function(X, omega, theta, grp=NULL, qhat=FALSE){
   if(is.null(grp)){ grp <- rep(1, nrow(X)) }
   K <- ncol(omega)
   n <- nrow(X)
@@ -311,8 +323,8 @@ tpxFromNEF <- function(Y, n, p, K){
   return(list(omega=t( matrix(bck$tomega, nrow=K) ), theta=matrix(bck$theta, ncol=K)))
 }
 
-tpxinit <- function(fcounts, X, K1, alpha, verb, param_set, del_beta, a_mu, b_mu,
-                    ztree_options, tol, admix, grp, tmax, wtol, qn){
+ord.tpxinit <- function(fcounts, X, K1, alpha, verb, param_set, del_beta, a_mu, b_mu,
+                    ztree_options, tol, admix, grp, tmax, wtol, qn, acc){
   ## initheta can be matrix, or c(nK, tmax, tol, verb)
   ini_mu_tree_set <- mu_tree_build_set(param_set);
   levels <- length(ini_mu_tree_set[[1]]);
@@ -321,11 +333,11 @@ tpxinit <- function(fcounts, X, K1, alpha, verb, param_set, del_beta, a_mu, b_mu
   if(is.matrix(initheta)){
     if(ncol(initheta)!=K1){ stop("mis-match between initheta and K.") }
     if(prod(initheta>0) != 1){ stop("use probs > 0 for initheta.") }
-    return(normalize(initheta, byrow=FALSE)) }
+    return(ord.normalizetpx(initheta, byrow=FALSE)) }
 
   if(is.matrix(alpha)){
     if(nrow(alpha)!=ncol(X) || ncol(alpha)!=K1){ stop("bad matrix alpha dimensions; check your K") }
-    return(normalize(alpha, byrow=FALSE)) }
+    return(ord.normalizetpx(alpha, byrow=FALSE)) }
 
   if(is.null(initheta)){ ilength <- K1-1 }
   else{ ilength <- initheta[1] }
@@ -345,9 +357,9 @@ tpxinit <- function(fcounts, X, K1, alpha, verb, param_set, del_beta, a_mu, b_mu
 
 
     ## Solve for map omega in NEF space
-    fit <- tpxfit(fcounts=fcounts, X=X, param_set=param_set, del_beta=del_beta, a_mu=a_mu, b_mu=b_mu,
+    fit <- ord.tpxfit(fcounts=fcounts, X=X, param_set=param_set, del_beta=del_beta, a_mu=a_mu, b_mu=b_mu,
                   ztree_options=ztree_options, tol=tol, verb=verb, admix=TRUE, grp=NULL, tmax=tmax, wtol=-1,
-                  qn=-1);
+                  qn=-1, acc = acc);
 
   initheta <- fit$theta;
   return(initheta)

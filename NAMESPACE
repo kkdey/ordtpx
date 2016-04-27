@@ -2,7 +2,7 @@ useDynLib(ordtpx)
 import(slam)
 
 export(stm_tfidf,
-       normalize,
+       ord.normalizetpx,
        rdir,
        ord_topics,
        mra_tree_prior_theta,
@@ -17,15 +17,15 @@ export(stm_tfidf,
        param_extract_mu_tree,
        prior_calc_fn,
        loglik_fn,
-       tpxlpost,
+       ord.tpxlpost,
        CheckCounts,
-       tpxfit,
-       tpxweights,
-       tpxQN,
-       tpxOmegaStart,
-       tpxQ,
-       tpxMixQ,
+       ord.tpxfit,
+       ord.tpxweights,
+       ord.tpxQN,
+       ord.tpxOmegaStart,
+       ord.tpxQ,
+       ord.tpxMixQ,
        tpxToNEF,
-       tpxFromNEF,
-       ord_topics)
+       tpxFromNEF
+       )
 

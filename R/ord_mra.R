@@ -1,7 +1,19 @@
 
 ## build a prior theta MRA tree
 
-# del_beta is a vector of length (#Levels-1) where #Levels is the number of levels in the MRA tree
+# del_beta is a vector of length (S-1)
+# where S is the number of levels in the MRA tree
+# This function generates \beta \sim Beta(del_beta[s], del_beta[s])
+# for the $s$ th level.
+
+# In the tree, the top level theta is 1. At the 2nd level, there are 2 theta values
+# and one beta representing message flow proportion. Next layer, there are 4 theta
+# values and 2 beta values. So the number of beta values at step s is same as the
+# number of theta values at step (s-1).
+
+## the function outputs the tree of theta values in the end
+
+### Example: mra_tree_prior_theta(4, c(1,2,2^2))
 
 mra_tree_prior_theta <- function(S, del_beta)
 {
@@ -16,7 +28,9 @@ mra_tree_prior_theta <- function(S, del_beta)
 }
 
 
-## build a prior mu MRA tree
+## We build a MRA tree for mu.
+## We use the above theta tree and then multiply the theta at each level by the
+## top level mu_0 value generated as mu_0 \sim Gamma(a_mu, b_mu)
 
 mra_tree_prior_mu <- function(S, del_beta, a_mu, b_mu)
 {
@@ -48,7 +62,8 @@ mra_bottom_up <- function(leaf_val)
   return(scaled_out)
 }
 
-## Construct the Z value MRA tree from the counts data and current iterates of omega and theta
+## Construct the Z value MRA tree from the counts data and
+## current iterates of omega and theta
 
 z_tree_construct <- function(counts, omega_iter, theta_iter, ztree_options=c(1,2))
 {
@@ -190,7 +205,10 @@ loglik_fn <- function(z_tree, param_set)
     S <- length(intree);
     loglik_out <- 0;
     for(s in 2:S){
-      loglik_out <- loglik_out + sum(dbinom(round(intree[[s]][c(TRUE,FALSE)]), round(intree[[(s-1)]]), param_set[[k]]$beta_tree[[(s-1)]],log=TRUE));
+      prob <- param_set[[k]]$beta_tree[[(s-1)]];
+      prob[prob>0.999999] <- 0.999999
+      prob[prob<0.000001] <- 0.000001
+      loglik_out <- loglik_out + sum(dbinom(round(intree[[s]][c(TRUE,FALSE)]), round(intree[[(s-1)]]), prob,log=TRUE));
     }
     loglik_out <- loglik_out + dpois(round(intree[[1]]),param_set[[k]]$mu, log=TRUE);
     return(loglik_out)
@@ -200,7 +218,7 @@ loglik_fn <- function(z_tree, param_set)
 
 ## Posterior computation: similar to tpxlpost() function in maptpx package of Matt Taddy
 
-tpxlpost <- function(counts, omega_iter, theta_iter, param_set, del_beta, a_mu, b_mu, ztree_options=c(1,2))
+ord.tpxlpost <- function(counts, omega_iter, theta_iter, param_set, del_beta, a_mu, b_mu, ztree_options=c(1,2))
 {
   z_tree <- z_tree_construct(counts, omega_iter, t(theta_iter), ztree_options = 1)
   loglik_value <- loglik_fn(z_tree, param_set = param_set);

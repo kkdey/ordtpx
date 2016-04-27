@@ -2,7 +2,8 @@
 ## intended main function; provides defaults and fits topic model for the user defined K
 ord_topics <- function(counts, K, shape=NULL, initopics=NULL, tol=0.1,
                   ord=TRUE, del_beta, a_mu, b_mu, ztree_options=1, verb=1, reflect=TRUE,
-                  tmax=10000, wtol=10^(-4), qn=100, grp=NULL, admix=TRUE, nonzero=FALSE, dcut=-10)
+                  tmax=10000, wtol=10^(-4), qn=100, grp=NULL, admix=TRUE, nonzero=FALSE, dcut=-10,
+                  acc=TRUE)
 {
   ceil <- ceiling(log(dim(counts)[2])/log(2));
   if(log(dim(counts)[2])%%log(2)!=0) {
@@ -44,23 +45,21 @@ ord_topics <- function(counts, K, shape=NULL, initopics=NULL, tol=0.1,
   param_set_start <- param_extract_mu_tree(theta_tree_start);
 
 
-  initopics_theta <- tpxinit(fcounts[1:min(ceiling(nrow(X)*.05),100),], X[1:min(ceiling(nrow(X)*.05),100),], K, shape,
-                       verb, param_set_start, del_beta, a_mu, b_mu, ztree_options, tol,
-                       admix, grp, tmax, wtol, qn);
+  initopics_theta <- ord.tpxinit(fcounts[1:min(ceiling(nrow(X)*.05),100),], X[1:min(ceiling(nrow(X)*.05),100),], K, shape,
+                        verb, param_set_start, del_beta, a_mu, b_mu, ztree_options, tol,
+                         admix, grp, tmax, wtol, qn, acc);
+
+  ## initialize
+  #initopics_theta_2 <- ord.tpxinit(X[1:min(ceiling(nrow(X)*.05),100),], initopics, K[1]+3, shape, verb)
+  #initopics_theta_2 <- initopics[,sort(sample(1:(K[1]+2), K, replace=FALSE))];
+
 
   initopics_theta_tree_set <- lapply(1:K, function(k) mra_bottom_up(initopics_theta[,k]));
   initopics_param_set <- param_extract_mu_tree(initopics_theta_tree_set)
 
-  fit <- tpxfit(fcounts=fcounts, X=X, param_set=initopics_param_set, del_beta=del_beta, a_mu=a_mu, b_mu=b_mu,
+  fit <- ord.tpxfit(fcounts=fcounts, X=X, param_set=initopics_param_set, del_beta=del_beta, a_mu=a_mu, b_mu=b_mu,
                 ztree_options=ztree_options, tol=tol, verb=verb, admix=admix, grp=grp, tmax=tmax, wtol=wtol,
-                qn=qn);
-
-
-  #initopics <- tpxinit(X[1:min(ceiling(nrow(X)*.05),100),], initopics, K[1], shape, verb)
-
-  ## either search for marginal MAP K and return bayes factors, or just fit
-  ## tpx <- tpxSelect(X, K, bf, initopics, alpha=shape, tol, kill, verb, ...)
-  ## K <- tpx$K
+                qn=qn, acc=acc);
 
   ## clean up and out
   if(ord){ worder <- order(col_sums(fit$omega), decreasing=TRUE) } else{ worder <- 1:K }
