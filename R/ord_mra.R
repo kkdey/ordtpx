@@ -62,6 +62,19 @@ mra_bottom_up <- function(leaf_val)
   return(scaled_out)
 }
 
+mra_bottom_up_set <- function(leaf_val_set)
+{
+  out <- vector(mode="list", length=dim(leaf_val_set)[2]);
+  out <- lapply(1:dim(leaf_val_set)[2], function(l)
+                {
+                    mra_tree <- mra_bottom_up(leaf_val = leaf_val_set[,l])
+                    return(mra_tree)
+  })
+  return(out)
+}
+
+
+
 ## Construct the Z value MRA tree from the counts data and
 ## current iterates of omega and theta
 
@@ -69,7 +82,7 @@ z_tree_construct <- function(counts, omega_iter, theta_iter, ztree_options=c(1,2
 {
   if(ztree_options==2){
   row_total <- rowSums(counts);
-  z_leaf_est <- round(sweep(theta_iter, MARGIN=1, colSums(sweep(omega_iter, MARGIN = 1, row_total, "*")), "*"));
+  z_leaf_est <- round(sweep(theta_iter, MARGIN=2, colSums(sweep(omega_iter, MARGIN = 1, row_total, "*")), "*"));
   }
   if(ztree_options==1){
     z_leaf_est <- (t(omega_iter) %*% (counts/(omega_iter %*% theta_iter)))*theta_iter;
@@ -206,8 +219,8 @@ loglik_fn <- function(z_tree, param_set)
     loglik_out <- 0;
     for(s in 2:S){
       prob <- param_set[[k]]$beta_tree[[(s-1)]];
-      prob[prob>0.999999] <- 0.999999
-      prob[prob<0.000001] <- 0.000001
+    #  prob[prob>0.999999] <- 0.999999
+    #  prob[prob<0.000001] <- 0.000001
       loglik_out <- loglik_out + sum(dbinom(round(intree[[s]][c(TRUE,FALSE)]), round(intree[[(s-1)]]), prob,log=TRUE));
     }
     loglik_out <- loglik_out + dpois(round(intree[[1]]),param_set[[k]]$mu, log=TRUE);
@@ -218,13 +231,31 @@ loglik_fn <- function(z_tree, param_set)
 
 ## Posterior computation: similar to tpxlpost() function in maptpx package of Matt Taddy
 
-ord.tpxlpost <- function(counts, omega_iter, theta_iter, param_set, del_beta, a_mu, b_mu, ztree_options=c(1,2))
+ord.tpxlpost <- function(counts, omega_iter, theta_iter, del_beta, a_mu, b_mu,
+                         ztree_options=c(1,2), adapt.method=c("beta","smash"))
 {
-  z_tree <- z_tree_construct(counts, omega_iter, t(theta_iter), ztree_options = 1)
+  omega_iter[omega_iter >=1 - 1e-14 ] <- 1 - 1e-14
+  omega_iter[omega_iter <= 1e-14] <- 1e-14
+
+  theta_iter[theta_iter >= 1 - 1e-14] <- 1 - 1e-14
+  theta_iter[theta_iter <= 1e-14] <- 1e-14
+
+  theta_iter <- ord.normalizetpx(theta_iter, byrow=FALSE)
+  omega_iter <- ord.normalizetpx(omega_iter, byrow=TRUE)
+
+  mra_set <- mra_bottom_up_set(theta_iter);
+  param_set <- param_extract_mu_tree(mra_set)
+
+  z_tree <- z_tree_construct(counts, omega_iter, t(theta_iter), ztree_options = ztree_options)
   loglik_value <- loglik_fn(z_tree, param_set = param_set);
-  prior_calc <- prior_calc_fn(param_set, del_beta, a_mu, b_mu);
   prior_omega <- (1/dim(omega_iter)[2])*sum(log(omega_iter[omega_iter > 0]))
-  posterior <- prior_calc + prior_omega + loglik_value;
+  if(adapt.method=="beta"){
+    prior_calc <- prior_calc_fn(param_set, del_beta, a_mu, b_mu);
+    posterior <- prior_calc + prior_omega + loglik_value;
+  }
+  if(adapt.method=="smash"){
+    posterior <- loglik_value + prior_omega
+  }
   return(posterior)
 }
 

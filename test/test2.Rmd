@@ -122,19 +122,36 @@ We now perform *ordtpx*.
 
 ```{r}
 library(slam)
-# initopics=NULL
-# tol=0.1
-# ord=TRUE
-# ztree_options=1
-# verb=1
-# reflect=TRUE
-# tmax=10000
-# wtol=10^(-4)
-# qn=100
-# grp=NULL
-# admix=TRUE
-# nonzero=FALSE
-# dcut=-10
+initopics=NULL
+tol=0.1
+ord=TRUE
+ztree_options=1
+verb=1
+reflect=TRUE
+tmax=10000
+wtol=10^(-4)
+qn=100
+grp=NULL
+admix=TRUE
+nonzero=FALSE
+dcut=-10
+init_method="taddy"
+adapt.method="smash"
+shape=NULL
+use_squarem=FALSE
+nbundles=1
+change_start_points=FALSE
+light=1
+method_admix=1
+top_genes=100
+burn_in=5
+
+source("../R/ord_count.R")
+source("../R/ord_mra.R")
+source("../R/ord_tpx.R")
+source("../R/tpx.R")
+source("../R/ord_topics.R")
+source("../R/count.R")
 ```
 
 ### Scenario 1
@@ -143,7 +160,8 @@ library(slam)
 K <- 2
 
 del_beta_1 <- c(50, 500, 5000, 50000, 500000, 5000000, 50000000)
-system.time(ord_topics <- ord_topics(counts, K=2, del_beta = del_beta_1, a_mu=1, b_mu=3, ztree_options=2, tol=0.001));
+system.time(ord_topics <- ordtpx::ord_topics(counts, K=2, ztree_options=1, tol=0.001, 
+                    adapt.method="smash", init_method = "taddy"));
 
 barplot(t(ord_topics$omega),
         col = 2:(K+1),
@@ -163,7 +181,7 @@ plot(ord_topics$theta[,2], type="l")
 K <- 2
 
 del_beta_1 <- c(50, 500, 5000, 50000, 500000, 5000000, 50000000)
-system.time(ord_topics <- ord_topics(counts, K=2, del_beta = del_beta_1, a_mu=10, b_mu=30, ztree_options=2, tol=0.001));
+system.time(ord_topics <- ord_topics(counts, K=2, del_beta = del_beta_1, a_mu=10, b_mu=30, ztree_options=2, tol=100));
 
 barplot(t(ord_topics$omega),
         col = 2:(K+1),
@@ -183,9 +201,9 @@ plot(ord_topics$theta[,2], type="l")
 K <- 2
 levels <- 7
 del_beta_1 <- 10*rep(10^{1:levels});
-system.time(ord_topics <- ord_topics(counts, K=2, del_beta = del_beta_1, a_mu=10, b_mu=30, ztree_options=2, tol=0.001));
+system.time(ord_topics <- ord_topics(counts, K=2, ztree_options=2, tol=1, init_method = "taddy", adapt.method="smash"));
 
-barplot(t(ord_topics$omega),
+barplot(t(omega),
         col = 2:(K+1),
         axisnames = F, space = 0, border = NA,
         main=paste("No. of clusters=", K),

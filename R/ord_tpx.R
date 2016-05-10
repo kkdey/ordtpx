@@ -20,7 +20,7 @@ CheckCounts <- function(fcounts){
 ## ** main workhorse function.  Only Called by the above wrappers.
 ## topic estimation for a given number of topics (taken as ncol(theta))
 ord.tpxfit <- function(fcounts, X, param_set, del_beta, a_mu, b_mu, ztree_options, tol, verb,
-                   admix, grp, tmax, wtol, qn, acc)
+                   admix, grp, tmax, wtol, qn, acc, adapt.method)
 {
   ## inputs and dimensions
   if(!inherits(X,"simple_triplet_matrix")){ stop("X needs to be a simple_triplet_matrix") }
@@ -38,7 +38,8 @@ ord.tpxfit <- function(fcounts, X, param_set, del_beta, a_mu, b_mu, ztree_option
   doc <- c(0,cumsum(as.double(table(factor(X$i, levels=c(1:nrow(X)))))))
 
   ## Initialize
-  omega <- ord.tpxweights(n=n, p=p, xvo=xvo, wrd=wrd, doc=doc, start=ord.tpxOmegaStart(X,theta), theta=theta)
+  omega <- ord.tpxweights(n=n, p=p, xvo=xvo, wrd=wrd, doc=doc,
+                          start=ord.tpxOmegaStart(X,theta), theta=theta)
 
   ## tracking
   iter <- 0
@@ -50,10 +51,14 @@ ord.tpxfit <- function(fcounts, X, param_set, del_beta, a_mu, b_mu, ztree_option
 
   Y <- NULL # only used for qn > 0
   Q0 <- col_sums(X)/sum(X)
-  L <- ord.tpxlpost(fcounts, omega_iter = omega, theta_iter = theta, param_set=param_set, del_beta, a_mu, b_mu, ztree_options=1);
+  L <- ord.tpxlpost(fcounts, omega_iter = omega, theta_iter = theta,
+                    del_beta, a_mu, b_mu, ztree_options=1,
+                    adapt.method=adapt.method);
  # if(is.infinite(L)){ L <- sum( (log(Q0)*col_sums(X))[Q0>0] ) }
 
   ## Iterate towards MAP
+  #tmax <- 5000
+
   while( update  && iter < tmax ){
 
     ## sequential quadratic programming for conditional Y solution
@@ -62,9 +67,36 @@ ord.tpxfit <- function(fcounts, X, param_set, del_beta, a_mu, b_mu, ztree_option
                                 start=omega, theta=theta,  verb=0, nef=TRUE, wtol=wtol, tmax=20) }
     if(!admix | wtol <=0){ Wfit <- omega }
 
+    move <- ord.tpxEM(X=X, m=m, theta=theta, omega=Wfit)
+
+    if(!acc){
+      #   z_tree <- z_tree_construct(fcounts, omega_iter = move$omega, theta_iter = t(move$theta), ztree_options = 1);
+      #    param_set_fit <- param_extract_ztree(z_tree, del_beta, a_mu, b_mu);
+      L_new <- ord.tpxlpost(fcounts, move$omega, move$theta,
+                            del_beta, a_mu, b_mu, ztree_options=1,
+                            adapt.method=adapt.method)
+      QNup <- list("move"=move, "L"=L_new, "Y"=NULL)
+      Y <- QNup$Y
+    }
+    ## joint parameter EM update
+    ## move <- tpxEM(X=X, m=m, theta=theta, omega=Wfit, alpha=alpha, admix=admix, grp=grp)
+
+    if(acc){
+      ## quasinewton acceleration
+      QNup <- ord.tpxQN(move=move, fcounts=fcounts, Y=Y, del_beta=del_beta, a_mu=a_mu, b_mu=b_mu,
+                        ztree_options=ztree_options, adapt.method = adapt.method,
+                        verb=verb, admix=admix, grp=grp, doqn=qn-dif)
+      move <- QNup$move
+      Y <- QNup$Y
+    }
+
+
+    if(adapt.method=="beta"){
     ## Construct the MRA of z-values given the current iterates of omega /theta
 
-    z_tree <- z_tree_construct(fcounts, omega_iter = Wfit, theta_iter = t(theta), ztree_options = 1);
+    z_tree <- z_tree_construct(fcounts, omega_iter = move$omega,
+                               theta_iter = t(move$theta),
+                               ztree_options = 1);
 
     ## Extract the beta and mu_0 parameters from the MRA tree
 
@@ -78,37 +110,75 @@ ord.tpxfit <- function(fcounts, X, param_set, del_beta, a_mu, b_mu, ztree_option
     ## Extract the theta updates from the MRA tree
 
     levels <- length(mu_tree_set_fit[[1]]);
-    theta_fit <- do.call(cbind, lapply(1:K, function(l) mu_tree_set_fit[[l]][[levels]]/mu_tree_set_fit[[l]][[1]]));
-    move <- list(theta=theta_fit, omega=Wfit);
-
-    if(!acc){
-      z_tree <- z_tree_construct(fcounts, omega_iter = move$omega, theta_iter = t(move$theta), ztree_options = 1);
-      param_set_fit <- param_extract_ztree(z_tree, del_beta, a_mu, b_mu);
-      L_new <- ord.tpxlpost(fcounts, move$omega, move$theta, param_set_fit, del_beta, a_mu, b_mu, ztree_options=1)
-      QNup <- list("move"=move, "L"=L_new, "Y"=NULL)
-      Y <- QNup$Y
+    theta_fit <- do.call(cbind, lapply(1:K,
+                  function(l) mu_tree_set_fit[[l]][[levels]]/mu_tree_set_fit[[l]][[1]]));
+    move <- list(theta=move$theta, omega=move$omega);
     }
-    ## joint parameter EM update
-    ## move <- tpxEM(X=X, m=m, theta=theta, omega=Wfit, alpha=alpha, admix=admix, grp=grp)
 
-    if(acc){
-    ## quasinewton-newton acceleration
-    QNup <- ord.tpxQN(move=move, fcounts=fcounts, Y=Y, del_beta=del_beta, a_mu=a_mu, b_mu=b_mu,
-                  ztree_options=ztree_options, verb=verb, admix=admix, grp=grp, doqn=qn-dif)
-    move <- QNup$move
-    Y <- QNup$Y
+    if(adapt.method=="smash"){
+      row_total <- rowSums(fcounts);
+      z_leaf_est <- round(sweep(move$theta, MARGIN=2, colSums(sweep(move$omega, MARGIN = 1,
+                                                               row_total, "*")), "*"));
+      #  plot(z_leaf_est[,1])
+      #  plot(z_leaf_est[,2])
+      z_leaf_smoothed <- do.call(cbind, lapply(1:dim(z_leaf_est)[2], function(k)
+      {
+        out <- suppressMessages(smashr::smash.poiss(z_leaf_est[,k]))
+        return(out)
+      }))
+      #  plot(z_leaf_smoothed[,1])
+      #  plot(z_leaf_smoothed[,2])
+      theta_smoothed <- ordtpx::ord.normalizetpx(z_leaf_smoothed, byrow=FALSE)
+      move <- list(theta=theta_smoothed, omega=move$omega)
+
+      QNup$L <- ord.tpxlpost(fcounts, move$omega, move$theta,
+                             del_beta, a_mu, b_mu, ztree_options=1,
+                             adapt.method=adapt.method)
     }
+
+
+#    plot(move$theta[,1], type="l")
+#    plot(move$theta[,2], type="l")
+#    barplot(t(move$omega),
+#            col = 2:(K+1),
+#            axisnames = F, space = 0, border = NA,
+#            main=paste("No. of clusters=", K),
+#            las=1, ylim=c(0,1), cex.axis=1.5, cex.main=1.4)
+
+
 
     if(QNup$L < L){  # happens on bad Wfit, so fully reverse
       if(verb > 10){ cat("_reversing a step_") }
       ##move <- tpxEM(X=X, m=m, theta=theta, omega=omega, alpha=alpha, admix=admix, grp=grp)
-      z_tree <- z_tree_construct(fcounts, omega_iter = omega, theta_iter = t(theta), ztree_options = 1);
-      param_set_fit <- param_extract_ztree(z_tree, del_beta, a_mu, b_mu);
-      mu_tree_set_fit <- mu_tree_build_set(param_set_fit);
-      levels <- length(mu_tree_set_fit[[1]]);
-      theta_fit <- do.call(cbind, lapply(1:K, function(l) mu_tree_set_fit[[l]][[levels]]/mu_tree_set_fit[[l]][[1]]));
-      move <- list(theta=theta_fit, omega=omega);
-      QNup$L <-  ord.tpxlpost(fcounts, move$omega, move$theta, param_set_fit, del_beta, a_mu, b_mu, ztree_options=1) }
+      if(adapt.method=="beta"){
+        move <- ord.tpxEM(X=X, m=m, theta=theta, omega=omega)
+        z_tree <- z_tree_construct(fcounts, omega_iter = move$omega, theta_iter = t(move$theta), ztree_options = 1);
+        param_set_fit <- param_extract_ztree(z_tree, del_beta, a_mu, b_mu);
+        mu_tree_set_fit <- mu_tree_build_set(param_set_fit);
+        levels <- length(mu_tree_set_fit[[1]]);
+        theta_fit <- do.call(cbind, lapply(1:K, function(l) mu_tree_set_fit[[l]][[levels]]/mu_tree_set_fit[[l]][[1]]));
+        move <- list(theta=theta_fit, omega=omega);
+        QNup$L <-  ord.tpxlpost(fcounts, move$omega, move$theta,
+                                del_beta, a_mu, b_mu, ztree_options=1,
+                                adapt.method=adapt.method)
+      }
+      if(adapt.method=="smash"){
+        move <- ord.tpxEM(X=X, m=m, theta=theta, omega=omega)
+        z_leaf_est <- round(sweep(move$theta, MARGIN=2, colSums(sweep(move$omega, MARGIN = 1, row_total, "*")), "*"));
+        z_leaf_smoothed <- do.call(cbind, lapply(1:dim(z_leaf_est)[2], function(k)
+        {
+          out <- suppressMessages(smashr::smash.poiss(z_leaf_est[,k]))
+          return(out)
+        }))
+        theta_smoothed <- ordtpx::ord.normalizetpx(z_leaf_smoothed, byrow=FALSE)
+        move <- list(theta=theta_smoothed, omega=omega)
+        QNup$L <-  ord.tpxlpost(fcounts, move$omega, move$theta,
+                                del_beta, a_mu, b_mu, ztree_options=1,
+                                adapt.method=adapt.method)
+      }
+
+}
+
 
     ## calculate dif
     dif <- (QNup$L-L)
@@ -121,7 +191,7 @@ ord.tpxfit <- function(fcounts, X, param_set, del_beta, a_mu, b_mu, ztree_option
       if(sum(abs(theta-move$theta)) < tol){ update = FALSE } }
 
     ## print
-    if(verb>0 && (iter-1)%%ceiling(10/verb)==0 && iter>0){
+    if(verb>0 && iter>0){
       cat( paste( round(abs(dif),digits), #" (", sum(abs(theta-move$theta)),")",
                  ", ", sep="") ) }
 
@@ -133,14 +203,13 @@ ord.tpxfit <- function(fcounts, X, param_set, del_beta, a_mu, b_mu, ztree_option
     ## iterate
     iter <- iter+1
     theta <- move$theta;
-    theta_tree_set <- lapply(1:K, function(k) mra_bottom_up(theta[,k]));
-    param_set <- param_extract_mu_tree(theta_tree_set)
     omega <- move$omega
 
   }
 
   ## final log posterior
-  L <- ord.tpxlpost(fcounts, omega, theta, param_set, del_beta, a_mu, b_mu, ztree_options=1);
+  L <- ord.tpxlpost(fcounts, omega, theta, del_beta, a_mu, b_mu,
+                    ztree_options=1, adapt.method=adapt.method);
 
   ## summary print
   if(verb>0){
@@ -149,7 +218,7 @@ ord.tpxfit <- function(fcounts, X, param_set, del_beta, a_mu, b_mu, ztree_option
     cat("\n")
   }
 
-  out <- list(param_set=param_set, omega=omega, K=K, L=L, iter=iter)
+  out <- list(theta=theta, omega=omega, K=K, L=L, iter=iter)
   invisible(out) }
 
 
@@ -178,26 +247,48 @@ ord.tpxweights <- function(n, p, xvo, wrd, doc, start, theta, verb=FALSE, nef=TR
 
 ## ** Called only in tpx.R
 
+ord.tpxEM <- function(X, m, theta, omega){
+  n <- nrow(X)
+  p <- ncol(X)
+  K <- ncol(theta)
+
+  lambda <- omega%*%t(theta);
+  counts2 <- as.matrix(X);
+  temp <- counts2/lambda;
+  t_matrix <- (t(temp) %*% omega)*theta;
+  w_matrix <- (temp %*% theta)*omega;
+
+  theta <- normalizetpx(t_matrix, byrow=FALSE)
+  omega <- normalizetpx(w_matrix+(1/(n*K)), byrow=TRUE)
+  full_indices <- which(omega==1, arr.ind=T)
+  full_indices_rows <- unique(full_indices[,1]);
+  omega[full_indices_rows,] <- omega[full_indices_rows,] + (1/(n*K));
+  omega <- normalizetpx(omega, byrow=TRUE)
+
+  return(list(theta=theta, omega=omega))
+  }
+
 
 ## Quasi Newton update for q>0
-ord.tpxQN <- function(move, fcounts, Y, del_beta, a_mu, b_mu, ztree_options, verb, admix, grp, doqn)
+ord.tpxQN <- function(move, fcounts, Y, del_beta, a_mu, b_mu,
+                      ztree_options, adapt.method,
+                      verb, admix, grp, doqn)
 {
   ## always check likelihood
   K <- ncol(move$theta);
-  theta_tree_set_in <- lapply(1:K, function(k) mra_bottom_up(move$theta[,k]));
-  param_set_in <- param_extract_mu_tree(theta_tree_set_in)
-  L <- ord.tpxlpost(fcounts, move$omega, move$theta, param_set_in, del_beta, a_mu, b_mu, ztree_options)
+  L <- ord.tpxlpost(fcounts, move$omega, move$theta, del_beta,
+                    a_mu, b_mu, ztree_options, adapt.method=adapt.method)
 
   if(doqn < 0){ return(list(move=move, L=L, Y=Y)) }
 
   temp_omega <- move$omega;
   temp_theta <- move$theta;
 
-  temp_omega[temp_omega==1]=1 - 1e-05
-  temp_omega[temp_omega==0]=1e-05
+  temp_omega[temp_omega >= 1 - 1e-14]=1 - 1e-14
+  temp_omega[temp_omega <= 1e-14]=1e-14
 
-  temp_theta[temp_theta==1]=1 - 1e-05
-  temp_theta[temp_theta==0]=1e-05
+  temp_theta[temp_theta >= 1 - 1e-14]=1 - 1e-14
+  temp_theta[temp_theta <= 1e-14]=1e-14
 
   temp_omega <- ord.normalizetpx(temp_omega, byrow=TRUE)
   temp_theta <- ord.normalizetpx(temp_theta, byrow=FALSE)
@@ -217,9 +308,9 @@ ord.tpxQN <- function(move, fcounts, Y, del_beta, a_mu, b_mu, ztree_options, ver
                      p=nrow(move$theta), K=ncol(move$theta))
 
   ## check for a likelihood improvement
-  theta_tree_set_nup <- lapply(1:K, function(k) mra_bottom_up(qnup$theta[,k]));
-  param_set_nup <- param_extract_mu_tree(theta_tree_set_nup)
-  Lqnup <- try(ord.tpxlpost(fcounts, qnup$omega, qnup$theta, param_set_nup, del_beta, a_mu, b_mu, ztree_options), silent=TRUE)
+  Lqnup <- try(ord.tpxlpost(fcounts, qnup$omega, qnup$theta,
+                            del_beta, a_mu, b_mu, ztree_options,
+                            adapt.method=adapt.method), silent=TRUE)
 
 
   if(inherits(Lqnup, "try-error")){
@@ -319,7 +410,7 @@ tpxFromNEF <- function(Y, n, p, K){
   bck <- .C("RfromNEF",
             n=as.integer(n), p=as.integer(p), K=as.integer(K),
             Y=as.double(Y), theta=double(K*p), tomega=double(K*n),
-            PACKAGE="ordtpx")
+            PACKAGE="maptpx")
   return(list(omega=t( matrix(bck$tomega, nrow=K) ), theta=matrix(bck$theta, ncol=K)))
 }
 
