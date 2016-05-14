@@ -1,6 +1,11 @@
 
 ## Bash : Binomial adaptive shrinkage
 
+#interleave two vectors
+interleave=function(x,y){
+  return(as.vector(rbind(x,y)))
+}
+
 postmean = function(m, betahat,sebetahat,v){
   UseMethod("postmean")
 }
@@ -435,7 +440,7 @@ bash.workhorse = function(counts,
   mixalpha <- autoselect.mixalpha(flow.prophat = flow.prophat,
                                   z_level = (counts_even+counts_odd),
                                   mult=gridmult)
-  if(pointmass){ mixsd = c(10^10,mixsd) }
+  if(pointmass){ mixsd = c(10^10,mixalpha) }
 
   null.comp <- which.max(alpha)
   k <- length(mixalpha)
@@ -451,7 +456,7 @@ bash.workhorse = function(counts,
   counts_odd_shrunk <- flow.posteriormean*(counts_even+counts_odd);
   counts_even_shrunk <- (1-flow.posteriormean)*(counts_even+counts_odd)
 
-  counts_shrunk <- c(rbind(counts_odd_shrunk, counts_even_shrunk));
+  counts_shrunk <- interleave(counts_odd_shrunk, counts_even_shrunk);
   loglik_final <- pi.fit$loglik;
   ll <- list("counts"=counts_shrunk, "loglik"=loglik_final);
   return(ll)

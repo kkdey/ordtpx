@@ -253,7 +253,7 @@ ord.tpxlpost <- function(counts, omega_iter, theta_iter, del_beta, a_mu, b_mu,
     prior_calc <- prior_calc_fn(param_set, del_beta, a_mu, b_mu);
     posterior <- prior_calc + prior_omega + loglik_value;
   }
-  if(adapt.method=="smash"){
+  if(adapt.method=="smash" | adapt.method=="bash"){
     posterior <- loglik_value + prior_omega
   }
   return(posterior)

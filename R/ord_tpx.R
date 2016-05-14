@@ -41,6 +41,7 @@ ord.tpxfit <- function(fcounts, X, param_set, del_beta, a_mu, b_mu, ztree_option
   omega <- ord.tpxweights(n=n, p=p, xvo=xvo, wrd=wrd, doc=doc,
                           start=ord.tpxOmegaStart(X,theta), theta=theta)
 
+ # omega <- matrix(1/K, ncol=K, nrow=n)
   ## tracking
   iter <- 0
   dif <- tol+1+qn
@@ -63,11 +64,13 @@ ord.tpxfit <- function(fcounts, X, param_set, del_beta, a_mu, b_mu, ztree_option
 
     ## sequential quadratic programming for conditional Y solution
 
-    if(admix && wtol > 0){ Wfit <- ord.tpxweights(n=nrow(X), p=ncol(X), xvo=xvo, wrd=wrd, doc=doc,
-                                start=omega, theta=theta,  verb=0, nef=TRUE, wtol=wtol, tmax=20) }
-    if(!admix | wtol <=0){ Wfit <- omega }
+    move <- ord.tpxEM(X=X, m=m, theta=theta, omega=omega, method_admix = 1)
 
-    move <- ord.tpxEM(X=X, m=m, theta=theta, omega=Wfit)
+
+    if(admix && wtol > 0){ Wfit <- ord.tpxweights(n=nrow(X), p=ncol(X), xvo=xvo, wrd=wrd, doc=doc,
+                                start=move$omega, theta=move$theta,  verb=0, nef=TRUE, wtol=wtol, tmax=20) }
+    if(!admix | wtol <=0){ Wfit <- move$omega }
+
 
     if(!acc){
       #   z_tree <- z_tree_construct(fcounts, omega_iter = move$omega, theta_iter = t(move$theta), ztree_options = 1);
@@ -135,9 +138,25 @@ ord.tpxfit <- function(fcounts, X, param_set, del_beta, a_mu, b_mu, ztree_option
                              del_beta, a_mu, b_mu, ztree_options=1,
                              adapt.method=adapt.method)
     }
+    if(adapt.method=="bash"){
+      row_total <- rowSums(fcounts);
+      z_leaf_est <- round(sweep(move$theta, MARGIN=2, colSums(sweep(move$omega, MARGIN = 1, row_total, "*")), "*"));
+      z_leaf_smoothed <- do.call(cbind, lapply(1:dim(z_leaf_est)[2], function(k)
+      {
+        out <- suppressMessages(binshrink(z_leaf_est[,k])$est)
+        return(out)
+      }))
+      theta_smoothed <- ordtpx::ord.normalizetpx(z_leaf_smoothed, byrow=FALSE)
+      move <- list(theta=theta_smoothed, omega=omega)
+      QNup$L <-  ord.tpxlpost(fcounts, move$omega, move$theta,
+                              del_beta, a_mu, b_mu, ztree_options=1,
+                              adapt.method=adapt.method)
+
+    }
 
 
-#    plot(move$theta[,1], type="l")
+
+#   plot(move$theta[,1], type="l")
 #    plot(move$theta[,2], type="l")
 #    barplot(t(move$omega),
 #            col = 2:(K+1),
@@ -146,9 +165,11 @@ ord.tpxfit <- function(fcounts, X, param_set, del_beta, a_mu, b_mu, ztree_option
 #            las=1, ylim=c(0,1), cex.axis=1.5, cex.main=1.4)
 
 
-
+#  if(adapt.method!="bash"){
     if(QNup$L < L){  # happens on bad Wfit, so fully reverse
       if(verb > 10){ cat("_reversing a step_") }
+ #     cat("We enter Qnup$L < L")
+#      cat("\n")
       ##move <- tpxEM(X=X, m=m, theta=theta, omega=omega, alpha=alpha, admix=admix, grp=grp)
       if(adapt.method=="beta"){
         move <- ord.tpxEM(X=X, m=m, theta=theta, omega=omega)
@@ -176,8 +197,24 @@ ord.tpxfit <- function(fcounts, X, param_set, del_beta, a_mu, b_mu, ztree_option
                                 del_beta, a_mu, b_mu, ztree_options=1,
                                 adapt.method=adapt.method)
       }
+      if(adapt.method=="bash"){
+        move <- ord.tpxEM(X=X, m=m, theta=theta, omega=omega)
+        z_leaf_est <- round(sweep(move$theta, MARGIN=2, colSums(sweep(move$omega, MARGIN = 1, row_total, "*")), "*"));
+        z_leaf_smoothed <- do.call(cbind, lapply(1:dim(z_leaf_est)[2], function(k)
+        {
+          out <- suppressMessages(binshrink(z_leaf_est[,k])$est)
+          return(out)
+        }))
+        theta_smoothed <- ordtpx::ord.normalizetpx(z_leaf_smoothed, byrow=FALSE)
+        move <- list(theta=theta_smoothed, omega=omega)
+        QNup$L <-  ord.tpxlpost(fcounts, move$omega, move$theta,
+                                del_beta, a_mu, b_mu, ztree_options=1,
+                                adapt.method=adapt.method)
 
-}
+      }
+
+    }
+#}
 
 
     ## calculate dif
@@ -247,23 +284,33 @@ ord.tpxweights <- function(n, p, xvo, wrd, doc, start, theta, verb=FALSE, nef=TR
 
 ## ** Called only in tpx.R
 
-ord.tpxEM <- function(X, m, theta, omega){
+ord.tpxEM <- function(X, m, theta, omega, method_admix=1){
   n <- nrow(X)
   p <- ncol(X)
   K <- ncol(theta)
 
-  lambda <- omega%*%t(theta);
-  counts2 <- as.matrix(X);
-  temp <- counts2/lambda;
-  t_matrix <- (t(temp) %*% omega)*theta;
-  w_matrix <- (temp %*% theta)*omega;
+  if(method_admix==1){
+    lambda <- omega%*%t(theta);
+    counts2 <- as.matrix(X);
+    temp <- counts2/lambda;
+    t_matrix <- (t(temp) %*% omega)*theta;
+    w_matrix <- (temp %*% theta)*omega;
 
-  theta <- normalizetpx(t_matrix, byrow=FALSE)
-  omega <- normalizetpx(w_matrix+(1/(n*K)), byrow=TRUE)
-  full_indices <- which(omega==1, arr.ind=T)
-  full_indices_rows <- unique(full_indices[,1]);
-  omega[full_indices_rows,] <- omega[full_indices_rows,] + (1/(n*K));
-  omega <- normalizetpx(omega, byrow=TRUE)
+    theta <- normalizetpx(t_matrix, byrow=FALSE)
+    omega <- normalizetpx(w_matrix+(1/(n*K)), byrow=TRUE)
+    full_indices <- which(omega==1, arr.ind=T)
+    full_indices_rows <- unique(full_indices[,1]);
+    omega[full_indices_rows,] <- omega[full_indices_rows,] + (1/(n*K));
+    omega <- normalizetpx(omega, byrow=TRUE)
+
+  }
+
+  if(method_admix==2){ Xhat <- (X$v/tpxQ(theta=theta, omega=omega, doc=X$i, wrd=X$j))*(omega[X$i,]*theta[X$j,])
+  Zhat <- .C("Rzhat", n=as.integer(n), p=as.integer(p), K=as.integer(K), N=as.integer(nrow(Xhat)),
+             Xhat=as.double(Xhat), doc=as.integer(X$i-1), wrd=as.integer(X$j-1),
+             zj = as.double(rep(0,K*p)), zi = as.double(rep(0,K*n)), PACKAGE="maptpx")
+  theta <- normalizetpx(matrix(Zhat$zj, ncol=K), byrow=FALSE)
+  omega <- normalizetpx(matrix(Zhat$zi+1/K, ncol=K)) }
 
   return(list(theta=theta, omega=omega))
   }

@@ -152,6 +152,7 @@ source("../R/ord_tpx.R")
 source("../R/tpx.R")
 source("../R/ord_topics.R")
 source("../R/count.R")
+source("../R/binshrink.R")
 ```
 
 ### Scenario 1
@@ -160,8 +161,17 @@ source("../R/count.R")
 K <- 2
 
 del_beta_1 <- c(50, 500, 5000, 50000, 500000, 5000000, 50000000)
-system.time(ord_topics <- ordtpx::ord_topics(counts, K=2, ztree_options=1, tol=0.001, 
-                    adapt.method="smash", init_method = "taddy"));
+
+library(inline)
+#library(Rcpp)
+library(ordtpx)
+library(maptpx)
+library(slam)
+library(smashr)
+
+
+system.time(ord_topics <- ord_topics(counts, K=2, ztree_options=1, tol=0.1, 
+                    adapt.method="bash", init_method = "taddy", acc=TRUE));
 
 barplot(t(ord_topics$omega),
         col = 2:(K+1),
