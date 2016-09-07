@@ -103,7 +103,7 @@ source("../R/binshrink.R")
 K <- 2
 
 system.time(ord_topics <- ord_topics(counts, K=2, ztree_options=1, tol=0.1, 
-                    adapt.method="bash", init_method = "taddy", acc=TRUE));
+                    adapt.method="bash", init_method = "kmeans", acc=TRUE));
 
 barplot(t(ord_topics$omega),
         col = 2:(K+1),
@@ -135,8 +135,9 @@ plot(ord_topics$theta[,2], type="l")
 ```{r}
 K <- 2
 
-system.time(ord_topics <- ord_topics(counts, K=2, ztree_options=1, tol=0.1, 
-                    adapt.method="smash", init_method = "taddy", acc=TRUE));
+system.time(ord_topics <- ord_topics(counts, K=2, ztree_options=1, tol=100, 
+                    adapt.method="smash", init_method = "kmeans", acc=TRUE,
+                    burn_trials=5));
 
 barplot(t(ord_topics$omega),
         col = 2:(K+1),

@@ -27,7 +27,7 @@ ord.tpxfit <- function(fcounts, X, param_set, del_beta, a_mu, b_mu, ztree_option
   mu_tree_set <- mu_tree_build_set(param_set);
   K <- length(param_set);
   levels <- length(mu_tree_set[[1]]);
-  theta <- do.call(cbind, lapply(1:K, function(l) mu_tree_set[[l]][[levels]]/mu_tree_set[[l]][[1]]));
+  theta <- do.call(cbind, lapply(1:K, function(l) (mu_tree_set[[l]][[levels]]/(mu_tree_set[[l]][[1]]))));
   n <- nrow(X)
   p <- ncol(X)
   m <- row_sums(X)
@@ -126,8 +126,12 @@ ord.tpxfit <- function(fcounts, X, param_set, del_beta, a_mu, b_mu, ztree_option
       #  plot(z_leaf_est[,2])
       z_leaf_smoothed <- do.call(cbind, lapply(1:dim(z_leaf_est)[2], function(k)
       {
-        out <- suppressMessages(smashr::smash.poiss(z_leaf_est[,k]))
-        return(out)
+        if(sum(z_leaf_est[,k]) > 0){
+           out <- suppressMessages(smashr::smash.poiss(z_leaf_est[,k]))
+           return(out)
+        }else{
+           return(z_leaf_est[,k])
+        }
       }))
       #  plot(z_leaf_smoothed[,1])
       #  plot(z_leaf_smoothed[,2])
@@ -143,8 +147,12 @@ ord.tpxfit <- function(fcounts, X, param_set, del_beta, a_mu, b_mu, ztree_option
       z_leaf_est <- round(sweep(move$theta, MARGIN=2, colSums(sweep(move$omega, MARGIN = 1, row_total, "*")), "*"));
       z_leaf_smoothed <- do.call(cbind, lapply(1:dim(z_leaf_est)[2], function(k)
       {
-        out <- suppressMessages(binshrink(z_leaf_est[,k])$est)
-        return(out)
+        if(sum(z_leaf_est[,k])>0){
+          out <- suppressMessages(binshrink(z_leaf_est[,k])$est)
+          return(out)
+        }else{
+          return(z_leaf_est[,k])
+        }
       }))
       theta_smoothed <- ordtpx::ord.normalizetpx(z_leaf_smoothed, byrow=FALSE)
       move <- list(theta=theta_smoothed, omega=omega)
@@ -188,8 +196,12 @@ ord.tpxfit <- function(fcounts, X, param_set, del_beta, a_mu, b_mu, ztree_option
         z_leaf_est <- round(sweep(move$theta, MARGIN=2, colSums(sweep(move$omega, MARGIN = 1, row_total, "*")), "*"));
         z_leaf_smoothed <- do.call(cbind, lapply(1:dim(z_leaf_est)[2], function(k)
         {
-          out <- suppressMessages(smashr::smash.poiss(z_leaf_est[,k]))
-          return(out)
+          if(sum(z_leaf_est[,k])>0){
+            out <- suppressMessages(smashr::smash.poiss(z_leaf_est[,k]))
+            return(out)
+          }else{
+            return(z_leaf_est[,k])
+          }
         }))
         theta_smoothed <- ordtpx::ord.normalizetpx(z_leaf_smoothed, byrow=FALSE)
         move <- list(theta=theta_smoothed, omega=omega)
@@ -202,8 +214,12 @@ ord.tpxfit <- function(fcounts, X, param_set, del_beta, a_mu, b_mu, ztree_option
         z_leaf_est <- round(sweep(move$theta, MARGIN=2, colSums(sweep(move$omega, MARGIN = 1, row_total, "*")), "*"));
         z_leaf_smoothed <- do.call(cbind, lapply(1:dim(z_leaf_est)[2], function(k)
         {
-          out <- suppressMessages(binshrink(z_leaf_est[,k])$est)
-          return(out)
+          if(sum(z_leaf_est[,k])>0){
+            out <- suppressMessages(binshrink(z_leaf_est[,k])$est)
+            return(out)
+          }else{
+            return(z_leaf_est[,k])
+          }
         }))
         theta_smoothed <- ordtpx::ord.normalizetpx(z_leaf_smoothed, byrow=FALSE)
         move <- list(theta=theta_smoothed, omega=omega)
@@ -263,6 +279,10 @@ ord.tpxfit <- function(fcounts, X, param_set, del_beta, a_mu, b_mu, ztree_option
 ## Conditional solution for topic weights given theta
 ord.tpxweights <- function(n, p, xvo, wrd, doc, start, theta, verb=FALSE, nef=TRUE, wtol=10^{-5}, tmax=1000)
 {
+  theta[theta==1] <- 1 - 1e-14;
+  theta[theta==0] <- 1e-14;
+  theta <- ord.normalizetpx(theta, byrow = FALSE)
+
   K <- ncol(theta)
   start[start == 0] <- 0.1/K
   start <- start/rowSums(start)

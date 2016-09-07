@@ -21,8 +21,8 @@ ord_topics <- function(counts,
                        nonzero=FALSE,
                        dcut=-10,
                        acc=TRUE,
-                       burn_trials=30,
-                       init_method = c("mra", "taddy"),
+                       burn_trials=5,
+                       init_method = c("mra", "taddy", "kmeans"),
                        adapt.method=c("beta", "smash", "bash"))
 {
   ceil <- ceiling(log(dim(counts)[2])/log(2));
@@ -70,6 +70,9 @@ ord_topics <- function(counts,
   loglik_list <- vector(mode = "list", length = burn_trials)
   init_theta_list <- vector(mode = "list", length = burn_trials)
 
+  iter.max_val <- floor(seq(5,min(burn_trials*5, dim(fcounts)[1]), length.out=burn_trials))
+
+
   for(init.repeat in 1:burn_trials){
     if(init.repeat==1){
       inds <- 1: min(ceiling(nrow(X)*.05),100);
@@ -83,10 +86,20 @@ ord_topics <- function(counts,
                                      X[inds,], K, shape,
                                      verb, param_set_start, del_beta, a_mu, b_mu, ztree_options, tol,
                                      admix, grp, tmax, wtol, qn, acc);
-    }else{
+    }
+    if(init_method=="taddy"){
       initopics_theta <-   tpxinit(X[inds,], initopics, K[1],
                                    shape, verb, nbundles=1, use_squarem=FALSE, init.adapt = TRUE)
     }
+    if(init_method=="kmeans"){
+      kmeans.init=kmeans(fcounts,K,nstart=5, iter.max=iter.max_val[init.repeat])
+      phi=t(kmeans.init$centers)
+      initopics_theta = apply(phi, 2, function(x) return(x/sum(x)))
+    }
+
+    initopics_theta[initopics_theta==0] <- 1e-14;
+    initopics_theta[initopics_theta==0] <- 1- 1e-14;
+    initopics_theta <- ord.normalizetpx(initopics_theta, byrow = FALSE)
 
     initopics_theta_tree_set <- lapply(1:K, function(k) mra_bottom_up(initopics_theta[,k]));
     initopics_param_set <- param_extract_mu_tree(initopics_theta_tree_set)
@@ -115,6 +128,9 @@ ord_topics <- function(counts,
   #initopics_theta_2 <- ord.tpxinit(X[1:min(ceiling(nrow(X)*.05),100),], initopics, K[1]+3, shape, verb)
   #initopics_theta_2 <- initopics[,sort(sample(1:(K[1]+2), K, replace=FALSE))];
 
+  initopics_theta[initopics_theta==0] <- 1e-14;
+  initopics_theta[initopics_theta==0] <- 1- 1e-14;
+  initopics_theta <- ord.normalizetpx(initopics_theta, byrow = FALSE)
 
   initopics_theta_tree_set <- lapply(1:K, function(k) mra_bottom_up(initopics_theta[,k]));
   initopics_param_set <- param_extract_mu_tree(initopics_theta_tree_set)
