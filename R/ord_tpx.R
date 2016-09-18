@@ -127,7 +127,7 @@ ord.tpxfit <- function(fcounts, X, param_set, del_beta, a_mu, b_mu, ztree_option
       z_leaf_smoothed <- do.call(cbind, lapply(1:dim(z_leaf_est)[2], function(k)
       {
         if(sum(z_leaf_est[,k]) > 0){
-           out <- suppressMessages(smashr::smash.poiss(z_leaf_est[,k]))
+           out <- suppressMessages(smashr::smash.poiss(z_leaf_est[,k], ashparam = list(control=list(maxiter=50))))
            return(out)
         }else{
            return(z_leaf_est[,k])
@@ -408,6 +408,14 @@ ord.tpxOmegaStart <- function(X, theta)
 
 ## fast computation of sparse P(X) for X>0
 ord.tpxQ <- function(theta, omega, doc, wrd){
+
+  theta[theta==1] <- 1 - 1e-14;
+  theta[theta==0] <- 1e-14;
+  theta <- ord.normalizetpx(theta, byrow = FALSE)
+
+  omega[omega==1] <- 1 - 1e-14;
+  omega[omega==0] <- 1e-14;
+  theta <- ord.normalizetpx(theta, byrow = TRUE)
 
   if(length(wrd)!=length(doc)){stop("index mis-match in ord.tpxQ") }
   if(ncol(omega)!=ncol(theta)){stop("theta/omega mis-match in ord.tpxQ") }

@@ -75,7 +75,7 @@ ord_topics <- function(counts,
 
   for(init.repeat in 1:burn_trials){
     if(init.repeat==1){
-      inds <- 1: min(ceiling(nrow(X)*.05),100);
+      inds <- 1:min(ceiling(nrow(X)*.05),100);
     }else{
       inds <- sample(1:dim(fcounts)[1],min(ceiling(nrow(X)*.05),100), replace=FALSE);
     }
