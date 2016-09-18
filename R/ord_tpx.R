@@ -127,7 +127,7 @@ ord.tpxfit <- function(fcounts, X, param_set, del_beta, a_mu, b_mu, ztree_option
       z_leaf_smoothed <- do.call(cbind, lapply(1:dim(z_leaf_est)[2], function(k)
       {
         if(sum(z_leaf_est[,k]) > 0){
-           out <- suppressMessages(smashr::smash.poiss(z_leaf_est[,k], ashparam = list(control=list(maxiter=50))))
+           out <- suppressMessages(smashr::smash.poiss(z_leaf_est[,k], ashparam = list(control=list(maxiter=500))))
            return(out)
         }else{
            return(z_leaf_est[,k])
